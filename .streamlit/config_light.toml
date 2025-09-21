@@ -1,0 +1,7 @@
+[theme]
+base = "light"
+primaryColor = "#0E5AA7"            # accent (blue)
+backgroundColor = "#FFFFFF"         # page bg
+secondaryBackgroundColor = "#F5F7FB" # sidebar/panels
+textColor = "#111827"               # near-black text
+font = "sans serif"

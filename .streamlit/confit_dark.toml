@@ -1,0 +1,7 @@
+[theme]
+base = "dark"
+primaryColor = "#1E90FF"             # icy blue
+backgroundColor = "#0E1117"          # very dark slate
+secondaryBackgroundColor = "#20232A" # softer panel
+textColor = "#F8F8F2"                # light grayish white
+font = "sans serif"

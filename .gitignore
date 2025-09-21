@@ -1,0 +1,27 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.venv/
+venv/
+.env
+.env.*
+
+# --- Streamlit ---
+.streamlit/secrets.toml
+.streamlit/credentials.toml
+.streamlit/cache/
+.streamlit/cache/**
+
+# --- Notebooks / tmp ---
+.ipynb_checkpoints/
+*.ipynb
+*.log
+
+# --- OS / Editors ---
+.DS_Store
+Thumbs.db
+.vscode/

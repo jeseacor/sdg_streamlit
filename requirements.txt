@@ -1,0 +1,15 @@
+streamlit>=1.38
+streamlit-option-menu>=0.3.6
+pandas>=2.2
+numpy>=1.26
+plotly>=5.22
+networkx>=2.8
+scikit-learn>=1.5
+scipy>=1.11
+matplotlib>=3.8
+seaborn>=0.13
+requests>=2.32
+beautifulsoup4>=4.12
+ipython>=8.25
+python-dotenv>=1.0
+openai>=1.42
