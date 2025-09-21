@@ -341,15 +341,15 @@ class ProjectKit:
         return prof
 
 
-    def plotly_fig_to_data_url(fig, width=900, height=600, scale=1):
+    def plotly_fig_to_data_url(self, fig, *, width=900, height=600, scale=1):
+        """Return data:image/png;base64,... or None if export fails."""
         try:
             png = pio.to_image(fig, format="png", width=width, height=height,
                             scale=scale, engine="kaleido")
         except Exception as e1:
-            # last-ditch smaller try
             try:
-                png = pio.to_image(fig, format="png", width=800, height=500,
-                                scale=1, engine="kaleido")
+                png = pio.to_image(fig, format="png", width=min(width, 800),
+                                height=min(height, 500), scale=1, engine="kaleido")
             except Exception as e2:
                 print("Plot image export failed:", e1, "/", e2)
                 return None
@@ -377,7 +377,7 @@ class ProjectKit:
 
         if fig is not None:
             # Keep your current image flow
-            data_url = self.plotly_fig_to_data_url(fig, width=900, height=600, scale=1)
+            data_url = self.plotly_fig_to_data_url(fig=fig)
             prompt = (
                 "You are the insights writer for an SDG analytics app. You will receive a chart "
                 "image and a small JSON payload describing what is plotted. Produce the following:\n"
@@ -559,7 +559,7 @@ class ProjectKit:
         # figure snapshot
         if fig is not None:
             try:
-                self._chat_view["image"] = self.plotly_fig_to_data_url(fig, width=900, height=600, scale=1)
+                self._chat_view["image"] = self.plotly_fig_to_data_url(fig)
             except Exception:
                 self._chat_view["image"] = None
         # dataframe compact profile
