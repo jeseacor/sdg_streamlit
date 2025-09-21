@@ -6,6 +6,27 @@ from pandas.util import hash_pandas_object
 from base64 import b64encode
 from pathlib import Path
 from streamlit_option_menu import option_menu
+import plotly.io as pio
+
+# ---- New API (plotly.io.defaults.*) ----
+try:
+    pio.defaults.width  = 900
+    pio.defaults.height = 600
+    pio.defaults.scale  = 1
+    pio.defaults.format = "png"
+except Exception:
+    pass
+
+# ---- Legacy API (kaleido.scope.*) for older combos ----
+try:
+    sc = pio.kaleido.scope
+    if hasattr(sc, "default_width"):  sc.default_width  = 900
+    if hasattr(sc, "default_height"): sc.default_height = 600
+    if hasattr(sc, "default_scale"):  sc.default_scale  = 1
+    if hasattr(sc, "default_format"): sc.default_format = "png"
+    if hasattr(sc, "mathjax"):        sc.mathjax = None
+except Exception:
+    pass
 
 
 key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
@@ -14,7 +35,7 @@ if key:
 else:
     st.error("Missing OPENAI_API_KEY. Add it in Streamlit Secrets or your local .env")
     st.stop()
-    
+
 from sdg_module import ProjectKit
 
 st.set_page_config(page_title="SDG Analytics – Function Pages", layout="wide")

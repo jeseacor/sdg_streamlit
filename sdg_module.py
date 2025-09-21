@@ -341,19 +341,18 @@ class ProjectKit:
         return prof
 
 
-    def plotly_fig_to_data_url(self, fig, width=1200, height=800, scale=2):
-        """Export a Plotly figure to a PNG data URL with safe fallbacks."""
-        png = None
+    def plotly_fig_to_data_url(fig, width=900, height=600, scale=1):
         try:
-            png = pio.to_image(fig, format="png", width=width, height=height, scale=scale)
+            png = pio.to_image(fig, format="png", width=width, height=height,
+                            scale=scale, engine="kaleido")
         except Exception as e1:
-            # lightweight fallback (often needed on Streamlit Cloud)
+            # last-ditch smaller try
             try:
-                png = pio.to_image(fig, format="png", width=min(width, 900),
-                                height=min(height, 600), scale=1)
+                png = pio.to_image(fig, format="png", width=800, height=500,
+                                scale=1, engine="kaleido")
             except Exception as e2:
-                raise RuntimeError(f"Plot image export failed: {e2}") from e1
-
+                print("Plot image export failed:", e1, "/", e2)
+                return None
         return "data:image/png;base64," + base64.b64encode(png).decode("utf-8")
 
 
