@@ -341,19 +341,21 @@ class ProjectKit:
         return prof
 
 
-    def plotly_fig_to_data_url(self, fig, width=1200, height=800, scale=2, auto_install_chrome=True):
+    def plotly_fig_to_data_url(self, fig, width=1200, height=800, scale=2):
+        """Export a Plotly figure to a PNG data URL with safe fallbacks."""
+        png = None
         try:
             png = pio.to_image(fig, format="png", width=width, height=height, scale=scale)
-        except Exception as e:
-            msg = str(e).lower()
-            #if auto_install_chrome and "chrome" in msg and ("not found" in msg or "install" in msg):
-            #    import kaleido
-            #    kaleido.get_chrome_sync()
-            #    png = pio.to_image(fig, format="png", width=width, height=height, scale=scale)
-            #else:
-            #    raise
-        data_url = "data:image/png;base64," + base64.b64encode(png).decode("utf-8")
-        return data_url
+        except Exception as e1:
+            # lightweight fallback (often needed on Streamlit Cloud)
+            try:
+                png = pio.to_image(fig, format="png", width=min(width, 900),
+                                height=min(height, 600), scale=1)
+            except Exception as e2:
+                raise RuntimeError(f"Plot image export failed: {e2}") from e1
+
+        return "data:image/png;base64," + base64.b64encode(png).decode("utf-8")
+
 
     def generate_nlp_insight(
         self,
@@ -376,7 +378,7 @@ class ProjectKit:
 
         if fig is not None:
             # Keep your current image flow
-            data_url = self.plotly_fig_to_data_url(fig)
+            data_url = self.plotly_fig_to_data_url(fig, width=900, height=600, scale=1)
             prompt = (
                 "You are the insights writer for an SDG analytics app. You will receive a chart "
                 "image and a small JSON payload describing what is plotted. Produce the following:\n"
