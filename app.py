@@ -6,7 +6,7 @@ from pandas.util import hash_pandas_object
 from base64 import b64encode
 from pathlib import Path
 from streamlit_option_menu import option_menu
-from sdg_module import ProjectKit
+
 
 key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
 if key:
@@ -14,7 +14,8 @@ if key:
 else:
     st.error("Missing OPENAI_API_KEY. Add it in Streamlit Secrets or your local .env")
     st.stop()
-
+    
+from sdg_module import ProjectKit
 
 st.set_page_config(page_title="SDG Analytics – Function Pages", layout="wide")
 
