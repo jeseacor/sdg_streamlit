@@ -346,12 +346,12 @@ class ProjectKit:
             png = pio.to_image(fig, format="png", width=width, height=height, scale=scale)
         except Exception as e:
             msg = str(e).lower()
-            if auto_install_chrome and "chrome" in msg and ("not found" in msg or "install" in msg):
-                import kaleido
-                kaleido.get_chrome_sync()
-                png = pio.to_image(fig, format="png", width=width, height=height, scale=scale)
-            else:
-                raise
+            #if auto_install_chrome and "chrome" in msg and ("not found" in msg or "install" in msg):
+            #    import kaleido
+            #    kaleido.get_chrome_sync()
+            #    png = pio.to_image(fig, format="png", width=width, height=height, scale=scale)
+            #else:
+            #    raise
         data_url = "data:image/png;base64," + base64.b64encode(png).decode("utf-8")
         return data_url
 
