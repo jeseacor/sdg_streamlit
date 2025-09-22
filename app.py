@@ -38,7 +38,7 @@ else:
 
 from sdg_module import ProjectKit
 
-st.set_page_config(page_title="SDG Analytics – Function Pages", layout="wide")
+st.set_page_config(page_title="GoalScope SDG Analytics Hub", layout="wide")
 
 def _insights_store() -> dict:
     """Per-session dict for AI insights (plots & tables)."""
