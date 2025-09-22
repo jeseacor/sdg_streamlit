@@ -366,6 +366,7 @@ st.markdown("""
     font-size: 3em;
     font-weight: 700;
     margin-bottom: 0.4em;
+    text-shadow: 1px 4px 12px rgba(0,0,0,1);
     color: #4789C8;
 }
 .feature-card {
