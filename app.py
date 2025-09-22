@@ -341,6 +341,9 @@ st.markdown("""
     color: #d9d9d9;
     text-shadow: 1px 4px 12px rgba(0,0,0,2);
 }
+.hero b {
+    color: white;
+}
 .hero .brand {
     font-famliy: Arial;
     font-size: 2em;
@@ -1044,16 +1047,34 @@ elif page == "Correlations":
         except Exception as e:
             st.warning(f"Could not compute summary: {e}")
 
+elif page == "About":
 
 
+    st.markdown("""
+    <div class="hero">
+        <h1>About</h1>
+        <p>
+            <b>GoalScope SDG Analytics Hub</b><br><br>
+            University: <b>Massey University, New Zealand</b><br>
+            Paper: <b>158888 — Information Technology Professional Project</b><br><br>
+            Group Members : <b>Jesus Eric Seacor, Sai Ram Ceka</b><br>
+            Supervisor: <b>Dr. Niloofar Aflaki</b><br><br>
+            <i>App created by Jesus Eric Seacor; analysis and project work in collaboration with Sai Ram Ceka.</i>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)    
 
-st.caption("""
-AI Use Statement : 
-This app generates human-readable “NLP insights” from plots using OpenAI’s GPT models via the Responses API. 
-My contributions include: data acquisition/wrangling, correlation/analysis code, plot generation, prompt and instruction design, 
-vector-store/file-search context, UI integration, caching, and evaluation of insight quality. 
-All AI-generated text is labeled in the UI and logged for reproducibility. No model fine-tuning was performed.
-""")
+
+    st.caption("""
+    AI Use Statement : 
+    This app generates human-readable “NLP insights” from plots using OpenAI’s GPT models via the Responses API. 
+    My contributions include: data acquisition/wrangling, correlation/analysis code, plot generation, prompt and instruction design, 
+    vector-store/file-search context, UI integration, caching, and evaluation of insight quality. 
+    All AI-generated text is labeled in the UI and logged for reproducibility. No model fine-tuning was performed.
+    """)
+
+    st.caption("© Massey University GoalScope — session-based demo with AI insights")
+
 
 y0, y1 = int(min(YEARS)), int(max(YEARS))
 st.markdown(
