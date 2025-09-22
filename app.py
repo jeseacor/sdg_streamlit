@@ -339,7 +339,7 @@ st.markdown("""
     letter-spacing: -1.5px;
     line-height: 1.1;
     color: #d9d9d9;
-    text-shadow: 1px 1px 4px rgba(0,0,0,0.6);
+    text-shadow: 1px 4px 12px rgba(0,0,0,2);
 }
 .hero .brand {
     font-famliy: Arial;
