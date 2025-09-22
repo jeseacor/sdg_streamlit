@@ -372,11 +372,10 @@ st.markdown("""
     font-size: 1.3em;
     font-weight: 700;
     margin-bottom: 0.4em;
-    color: #4789C8;
-    background-color: #004b8d;            
+    color: #4789C8;      
     padding: 1.2em;
     border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0,0,0,1);
     margin-bottom: 1.5em;
 }
 .feature-card h4 {
@@ -448,11 +447,15 @@ if page == "Home":
 
         with st.container(border=True):
             st.markdown('<div class="section-title">Data & Method</div>', unsafe_allow_html=True)
-            st.markdown(
-                "- Data sourced from **SDR 2025** (ArcGIS FeatureServer / UN SDG APIs) and loaded into pandas for wrangling.\n"
-                "- Correlation analysis highlights relationships across indicators and goals; literature guides interpretation.\n"
-                "- Optional ML prototypes explore forecasting; the app integrates **NLP** to generate dynamic plot insights."
-            )    
+            st.markdown("""
+            <div class="feature-card"> 
+                <ul>
+                    <li>Data sourced from <b>ArcGIS FeatureServer / UN SDG APIs</b> and loaded into pandas for wrangling.</li>
+                    <li>Correlation analysis highlights relationships across indicators and goals; literature guides interpretation.</li>
+                    <li>The app integrates <b>NLP</b> to generate dynamic plot insights.</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)        
 
     #st.divider()
 
