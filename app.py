@@ -334,7 +334,7 @@ st.markdown("""
 }
 .hero h1 {
     font-famliy: Arial;
-    font-size: 2em;
+    font-size: 2.2em;
     font-weight: 900;
     letter-spacing: -1.5px;
     line-height: 1.1;
