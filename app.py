@@ -334,7 +334,7 @@ st.markdown("""
 }
 .hero h1 {
     font-famliy: Arial;
-    font-size: 3em;
+    font-size: 5em;
     font-weight: 900;
     letter-spacing: -1.5px;
     line-height: 1.1;
@@ -351,7 +351,7 @@ st.markdown("""
     color: #4789C8;
 }
 .hero .sub {
-    font-size: 0.6em;
+    font-size: 0.8em;
     color: #d9d9d9;
 }
 .hero p {
@@ -401,10 +401,10 @@ st.markdown("""
 # -------------------- Home --------------------
 if page == "Home":
 
-
+    st.image("assets/goalscope_logo.jpg", use_container_width=True)    
+    #<h1><span class="dot">GOAL</span><span class="brand">Scope </span><span class="sub">{ SDG Analytics Hub }</span></h1>
     st.markdown("""
     <div class="hero">
-        <h1><span class="dot">GOAL</span><span class="brand">Scope </span><span class="sub">{ SDG Analytics Hub }</span></h1>
         <p>
             Welcome to Massey University GOALScope. A complete application for analyzing the latest, dynamic UN Sustainable Development Goals (SDG)
             data — augmented with fast AI insights.
