@@ -152,7 +152,7 @@ if "chat_open" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []  # list of {'role','content'}
 
-@st.dialog("🤖 Chat with SDG Assistant")
+@st.dialog("🤖 Chat with GoalScope Assistant")
 def chat_dialog():
     st.caption("Ask about goals, indicators, methods, or how to interpret a chart.")
 
@@ -306,7 +306,7 @@ with st.sidebar:
     linked_image_local("assets/sdg_logo_b.png", "https://sdgs.un.org/goals", width=220, sidebar=True)
     
     st.divider()
-    if st.button("🤖 SDG Chatbot", key="chat_sidebar_btn", use_container_width=True):
+    if st.button("🤖 Chatbot", key="chat_sidebar_btn", use_container_width=True):
         st.session_state.chat_open = True
         chat_dialog()    
 
