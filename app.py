@@ -1073,7 +1073,7 @@ elif page == "About":
     All AI-generated text is labeled in the UI and logged for reproducibility. No model fine-tuning was performed.
     """)
 
-    st.caption("© Massey University GoalScope — session-based demo with AI insights")
+    #st.caption("© Massey University GoalScope — session-based demo with AI insights")
 
 
 y0, y1 = int(min(YEARS)), int(max(YEARS))
