@@ -1058,7 +1058,7 @@ elif page == "About":
             University: <b>Massey University, New Zealand</b><br>
             Paper: <b>158888 — Information Technology Professional Project</b><br><br>
             Group Members : <b>Jesus Eric Seacor, Sai Ram Ceka</b><br>
-            Supervisor: <b>Dr. Niloofar Aflaki</b><br><br>
+            Teaching Team : <b>Dr. Anuradha Mathrani, Dr. Niloofar Aflaki</b><br><br>
             <i>App created by Jesus Eric Seacor; analysis and project work in collaboration with Sai Ram Ceka.</i>
         </p>
     </div>
