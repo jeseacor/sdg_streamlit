@@ -251,7 +251,7 @@ GROUPS = ["economic", "social", "environmental", "partnership"]
 PAGES = [
     "Home",
     "Ranking",
-    "Timeline",
+    "Trends & Timelines",
     "Network & Structure",
     "Correlations",
     "About"
@@ -339,7 +339,7 @@ st.markdown("""
     letter-spacing: -1.5px;
     line-height: 1.1;
     color: #d9d9d9;
-    text-shadow: 1px 4px 12px rgba(0,0,0,2);
+    text-shadow: 1px 1px 8px rgba(0,0,0,1);
 }
 .hero b {
     color: white;
@@ -369,7 +369,7 @@ st.markdown("""
     font-size: 3em;
     font-weight: 700;
     margin-bottom: 0.4em;
-    text-shadow: 1px 4px 12px rgba(0,0,0,1);
+    text-shadow: 1px 4px 12px rgba(0,0,0,0.4);
     color: #4789C8;
 }
 .feature-card {
@@ -473,14 +473,7 @@ if page == "Home":
 
 
 if page == "Ranking":
-    st.markdown("""
-    <div style="margin-bottom: 2em;">
-        <h1 style="font-size: 2.2em; font-weight: bold; color: #e0e0e0;">Performance Rankings</h1>
-        <p style="font-size: 1.05em; color: #aaa;">
-                Leaderboards that compare performance. View top/bottom performers by Goal/SDG or by Region/Country for a chosen year or window.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Performance Rankings</div>', unsafe_allow_html=True)
 
     sub = st.segmented_control(
         "",
@@ -618,15 +611,8 @@ if page == "Ranking":
             st.warning(f"Could not render: {e}")
     
 
-elif page == "Timeline":
-    st.markdown("""
-    <div style="margin-bottom: 2em;">
-        <h1 style="font-size: 2.2em; font-weight: bold; color: #e0e0e0;">Trends & Timelines</h1>
-        <p style="font-size: 1.05em; color: #aaa;">
-            Time-series views of SDG scores. Track trends, turning points, and volatility by SDG/Goal or for a specific locale.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+elif page == "Trends & Timelines":
+    st.markdown('<div class="section-title">Trends & Timelines</div>', unsafe_allow_html=True)
 
     sub = st.segmented_control(
         "",
@@ -709,15 +695,7 @@ elif page == "Timeline":
 
 
 if page == "Network & Structure":
-    st.markdown("""
-    <div style="margin-bottom: 2em;">
-        <h1 style="font-size: 2.2em; font-weight: bold; color: #e0e0e0;">Network & Structure</h1>
-        <p style="font-size: 1.05em; color: #aaa;">
-            Reveal structure in the data: correlation networks, PCA/biplots, clustering (dendrograms), and chord links to spot clusters and co-movement.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
+    st.markdown('<div class="section-title">Network & Structure</div>', unsafe_allow_html=True)
     sub = st.segmented_control(
         "",
         ["Network Graph", "PCA / Biplot", "Dendrogram", "Chord Diagram"], default="Network Graph",
@@ -896,14 +874,7 @@ if page == "Network & Structure":
 
 
 elif page == "Correlations":
-    st.markdown("""
-    <div style="margin-bottom: 2em;">
-        <h1 style="font-size: 2.2em; font-weight: bold; color: #e0e0e0;">Correlation Analysis</h1>
-        <p style="font-size: 1.05em; color: #aaa;">
-            All the pairwise relationship tools—matrices, grouped heatmaps, code-level cross-group comparisons, and summaries to find synergies and trade-offs.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Correlations</div>', unsafe_allow_html=True)
 
     sub = st.segmented_control(
         "",
