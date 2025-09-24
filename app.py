@@ -484,7 +484,7 @@ if page == "Ranking":
 
     sub = st.segmented_control(
         "",
-        ["Rankings", "Bar Chart (Locale)", "Bar Chart (SDG)"], default="Rankings",
+        ["Rankings", "Percent Change", "Bar Chart (Locale)", "Bar Chart (SDG)"], default="Rankings",
         key="ranking_view",
     )
 
@@ -513,6 +513,39 @@ if page == "Ranking":
 
         except Exception as e:
             st.warning(f"Could not render: {e}")
+
+    elif sub == "Percent Change":
+        c1, c2, c3, c4, c5 = st.columns(5)
+        with c1:
+            y0, y1 = st.select_slider("Start → End", options=YEARS, value=(YEARS[0], YEARS[-1]))
+        with c2:
+            level = st.selectbox("Level", ["goal", "sdg"], index=0)
+        with c3:
+            group_filter = st.multiselect("Group filter (optional)", GROUPS)
+        with c4:
+            entity_type = st.selectbox("Entity type", ["All", "Region", "Country"], index=0)
+        with c5:
+            sort_desc = st.checkbox("Sort high → low", value=False)
+
+        entities = []
+        if entity_type == "Region":
+            entities = st.multiselect("Pick regions", REGIONS)
+        elif entity_type == "Country":
+            entities = st.multiselect("Pick countries", COUNTRIES)
+
+        df_pct, fig = kit.pct_change_sdg(
+            df_sdg=df_sdg, df_lookup=df_lookup,
+            start_year=int(y0), end_year=int(y1),
+            level=level,
+            group_filter=group_filter if group_filter else None,
+            entity_type=None if entity_type == "All" else entity_type,
+            entities=entities if entities else None,
+            sort_desc=sort_desc,
+            return_fig=True,
+        )
+        show_plot(fig=fig, page_key="pct_change_sdg")
+
+
 
 
     elif sub == "Bar Chart (Locale)":

@@ -1222,6 +1222,172 @@ class ProjectKit:
         return fig
 
 
+    def pct_change_sdg(
+        self,
+        df_sdg: pd.DataFrame,
+        df_lookup: pd.DataFrame,
+        *,
+        start_year: int,
+        end_year: int,
+        level: str = "goal",                 # "goal" or "sdg"
+        group_filter: str | list[str] | None = None,   # economic, social, environmental, partnership
+        items: str | list[str] | None = None,          # specific codes like ["Goal_3","Goal_9"] or ["sdg9_uni", ...]
+        entity_type: str | None = None,     # None or "Region" or "Country"
+        entities: str | list[str] | None = None,       # one or many entity names when entity_type is set
+        agg: str = "mean",                  # "mean" or "median"
+        decimals: int = 2,
+        return_fig: bool = True,
+        sort_desc: bool = True,
+        template: str = "plotly_dark",
+        fig_height: int = 520,
+        fig_width: int = 960,
+    ):
+
+        def _as_list(x):
+            if x is None: return None
+            return [x] if isinstance(x, str) else list(x)
+
+        # pick columns for chosen level
+        lvl = level.strip().lower()
+        if   lvl == "goal": base_cols = [c for c in df_sdg.columns if isinstance(c, str) and c.startswith("Goal_")]
+        elif lvl == "sdg":  base_cols = [c for c in df_sdg.columns if isinstance(c, str) and c.lower().startswith("sdg")]
+        else:
+            raise ValueError("level must be 'goal' or 'sdg'")
+
+        if not base_cols:
+            raise ValueError("No matching SDG columns found for the selected level")
+
+        look = df_lookup.copy()
+        look["group"] = look["group"].astype(str).str.lower()
+
+        # filter by group names if provided
+        groups = _as_list(group_filter)
+        if groups:
+            groups_lc = [g.lower() for g in groups]
+            allowed = set(look.loc[look["group"].isin(groups_lc), "code"])
+            base_cols = [c for c in base_cols if c in allowed]
+
+        # filter to specific codes or group names via items, if provided
+        if items is not None:
+            want = []
+            for it in _as_list(items):
+                it_str = str(it)
+                if it_str.lower() in set(look["group"].unique()):
+                    want += look.loc[look["group"] == it_str.lower(), "code"].tolist()
+                else:
+                    want.append(it_str)
+            want = list(dict.fromkeys(want))
+            base_cols = [c for c in base_cols if c in want]
+
+        if not base_cols:
+            raise ValueError("No columns left after applying filters")
+
+        # slice by entities if requested
+        d = df_sdg.copy()
+        if entity_type is not None and entities is not None:
+            ent_list = _as_list(entities)
+            if entity_type not in d.columns:
+                raise ValueError(f"{entity_type} not found in dataframe")
+            d = d[d[entity_type].isin(ent_list)]
+
+        # pull start and end year blocks
+        ds = d[d["Year"] == int(start_year)]
+        de = d[d["Year"] == int(end_year)]
+        if ds.empty or de.empty:
+            raise ValueError("No rows for the given start or end year")
+
+        # aggregate across rows for each column
+        if agg == "median":
+            s_vals = ds[base_cols].median(numeric_only=True)
+            e_vals = de[base_cols].median(numeric_only=True)
+        else:
+            s_vals = ds[base_cols].mean(numeric_only=True)
+            e_vals = de[base_cols].mean(numeric_only=True)
+
+        # build result table
+        df_out = pd.DataFrame({
+            "code": base_cols,
+            "start": s_vals.reindex(base_cols).values.astype(float),
+            "end":   e_vals.reindex(base_cols).values.astype(float),
+        })
+        df_out["delta"] = df_out["end"] - df_out["start"]
+        # percent change with zero safe denom
+        denom = df_out["start"].replace(0, np.nan)
+        df_out["pct_change"] = (df_out["delta"] / denom) * 100.0
+
+        # attach metadata
+        meta = look[["code","group","description"]].drop_duplicates()
+        df_out = df_out.merge(meta, on="code", how="left")
+        # display label
+        if lvl == "goal":
+            df_out["label"] = df_out["code"]
+        else:
+            # show indicator code and its goal number if available
+            if "sdg" in df_lookup.columns:
+                m = df_lookup[["code","sdg"]].drop_duplicates()
+                df_out = df_out.merge(m, on="code", how="left")
+                df_out["label"] = df_out.apply(
+                    lambda r: f"{r['code']}" + (f" (Goal {int(r['sdg'])})" if pd.notna(r.get('sdg')) else ""),
+                    axis=1
+                )
+            else:
+                df_out["label"] = df_out["code"]
+
+        # rounding and order
+        df_out = df_out.round({"start": decimals, "end": decimals, "delta": decimals, "pct_change": decimals})
+        df_out = df_out.sort_values("pct_change", ascending=not sort_desc).reset_index(drop=True)
+
+        # chart
+        fig = None
+        if return_fig:
+            fig = px.bar(
+                df_out,
+                x="pct_change", y="label",
+                orientation="h",
+                text="pct_change",
+                template=template,
+                title=f"Percent change {start_year} to {end_year} • level {level}",
+                custom_data=["description","group","start","end","delta"]
+            )
+            fig.update_traces(
+                texttemplate="%{text:.2f}%",
+                hovertemplate="<b>%{y}</b><br>%{customdata[0]}<br>group: %{customdata[1]}"
+                            "<br>start: %{customdata[2]:.2f}  end: %{customdata[3]:.2f}"
+                            "<br>delta: %{customdata[4]:.2f}  pct: %{x:.2f}%<extra></extra>"
+            )
+            fig.update_layout(
+                xaxis_title="Percent change",
+                yaxis_title="Series",
+                height=fig_height,
+                width=fig_width,
+                margin=dict(l=80, r=30, t=70, b=40)
+            )
+            vals = df_out["pct_change"].astype(float)
+            
+            # symmetric range around 0
+            maxabs = float(np.nanmax(np.abs(vals)))
+            pad = max(1.0, maxabs * 0.08)         # little breathing room
+            fig.update_xaxes(
+                range=[-(maxabs + pad), (maxabs + pad)],
+                zeroline=True, zerolinewidth=2, zerolinecolor="#888",
+                ticksuffix="%"                     # optional: show % on axis ticks
+            )
+            
+            # emphasize the center line (works even if theme hides zeroline)
+            fig.add_vline(x=0, line_width=2, line_color="#999", opacity=0.7)
+            
+            # keep labels tidy when values are negative
+            fig.update_traces(
+                textposition=["outside" if v >= 0 else "inside" for v in vals],
+                insidetextanchor="start",
+                cliponaxis=False
+            )
+
+        return df_out, fig
+
+
+
+
 
     # endregion
 
