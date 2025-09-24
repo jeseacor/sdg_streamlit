@@ -366,7 +366,7 @@ st.markdown("""
     margin-right: auto;
 }
 .section-title {
-    font-size: 3em;
+    font-size: 2em;
     font-weight: 700;
     margin-bottom: 0.4em;
     text-shadow: 1px 4px 12px rgba(0,0,0,0.4);
