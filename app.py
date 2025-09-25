@@ -376,7 +376,8 @@ st.markdown("""
     font-size: 1.3em;
     font-weight: 700;
     margin-bottom: 0.4em;
-    color: #4789C8;      
+    color: #ccc;      
+    background-color: #0A2240;
     padding: 1.2em;
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0,0,0,1);
@@ -1053,9 +1054,8 @@ elif page == "Correlations":
 
 elif page == "About":
 
-
     st.markdown("""
-    <div class="hero">
+    <div class="feature-card">
         <h1>About</h1>
         <p>
             <b>GoalScope SDG Analytics Hub</b><br><br>
