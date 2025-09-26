@@ -224,7 +224,7 @@ def load_data():
     df_lookup = df_lookup.drop_duplicates(subset=["code"]).reset_index(drop=True)
     return df_sdg, df_lookup
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner=True)
 def get_kit():
     return ProjectKit()
 
@@ -486,7 +486,7 @@ if page == "Ranking":
 
     if sub == "Rankings":
         #st.subheader("get_ranking_table")
-        c1, c2 = st.columns(2)
+        c1, c2, c3 = st.columns(3)
         with c1:
             years = sorted(YEARS, reverse=True)
             year = st.selectbox("Year", years, index=0, key="rnk_year")
@@ -495,13 +495,19 @@ if page == "Ranking":
             goal_opts = ["Overall Score", *GOAL_COLS, *GROUPS, *SDG_COLS]
             sel = st.selectbox("Goal or Group", goal_opts, index=0, key="rnk_goal_choice")
             value_col = None if sel in ("", "Overall Score") else sel
+        with c3:
+            #value_col = st.selectbox("Goal/SDG or Group)", sorted(GOAL_COLS + SDG_COLS + GROUPS))
+            goal_opts = ["All Regions", *REGIONS]
+            sel = st.selectbox("Select Region", goal_opts, index=0, key="rnk_rgn_choice")
+            value_reg = None if sel in ("", "All Regions") else sel            
 
         try:
             df_rank = kit.get_ranking_table(
                 df_sdg=df_sdg,
                 df_lookup=df_lookup,
                 year=year,
-                goal=value_col
+                goal=value_col,
+                region=value_reg
             )
             show_plot(df=df_rank, page_key="get_ranking_table")
 
@@ -625,7 +631,7 @@ elif page == "Trends & Timelines":
     
     if sub == "Timeline (Locale)":
         #st.subheader("plot_goal_entity_timeline")
-        c1, c2, c3, c4, c5 = st.columns(5)
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
         with c1:
             goal_opts = ["Overall Score", *GOAL_COLS, *SDG_COLS]
             sel = st.selectbox("Goal", goal_opts, index=0, key="goal_choice")
@@ -636,8 +642,12 @@ elif page == "Trends & Timelines":
             entities = REGIONS if entity_type == "Region" else COUNTRIES
             picked = st.multiselect("Entities", entities)
         with c4:
-            top_n = st.number_input("Top N", min_value=5, max_value=50, value=10, step=1)
+            region_view_val = "region"
+            if entity_type == "Region":
+                region_view_val = st.selectbox("Region View", ["region", "countries"], index=0)
         with c5:
+            top_n = st.number_input("Top N", min_value=5, max_value=50, value=10, step=1)
+        with c6:
             h = st.slider("Figure height", 400, 1200, 600, step=50, key="gr_h")
         try:
             fig = kit.plot_goal_entity_timeline(
@@ -646,6 +656,7 @@ elif page == "Trends & Timelines":
                 goal=goal if goal else None,
                 entity_type=entity_type,
                 entities=picked if picked else None,
+                region_view=region_view_val,
                 agg="mean",
                 fig_height=h,
                 top_n=top_n
