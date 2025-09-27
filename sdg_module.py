@@ -774,7 +774,7 @@ class ProjectKit:
         )
         fig.update_traces(
             texttemplate="%{text:.2f}",
-            textposition="outside"
+            textposition="outside", marker_color="#4789C8"
         )
         fig.update_layout(
             yaxis_title=rank_by.capitalize(),
@@ -924,7 +924,7 @@ class ProjectKit:
             text=value_key, title=title, template=plot_theme
         )
         fig.update_yaxes(autorange="reversed")
-        fig.update_traces(texttemplate="%{x:.2f}", textposition="outside", cliponaxis=False)
+        fig.update_traces(texttemplate="%{x:.2f}", textposition="outside", cliponaxis=False, marker_color="#4789C8")
         fig.update_layout(
             xaxis_title=label_for_x,
             yaxis_title=y_label,
@@ -1481,7 +1481,7 @@ class ProjectKit:
             fig.update_traces(
                 textposition=["outside" if v >= 0 else "inside" for v in vals],
                 insidetextanchor="start",
-                cliponaxis=False
+                cliponaxis=False, marker_color="#4789C8"
             )
 
         return df_out, fig
