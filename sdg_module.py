@@ -791,37 +791,38 @@ class ProjectKit:
     def plot_sdg_ranking(
         self,
         data: pd.DataFrame,
-        value_col: str | None = None,           # None => Overall Score
-        group_col: str = "Country",             # "Region" or "Country"
+        value_col: str | None = None,        # None => Overall Score
+        group_col: str | None = "Country",   # NEW: None => treat as "Country" across all regions
         top_n: int = 5,
         ascending: bool = False,
         year: int | None = None,
-        aggfunc: str = "mean",                  # "mean","median","max","min"
+        aggfunc: str = "mean",               # "mean","median","max","min"
         title: str | None = None,
         plot_theme: str = "plotly_dark",
         df_lookup: pd.DataFrame | None = None,
         fig_height: int = 400,
-        fig_width: int = 1000
+        fig_width: int = 1000,
+        region_view: str | list[str] | None = None,  # filter by region(s) when grouping by Region
     ):
+        if region_view == 'All': region_view = None
+
         d = data.copy()
         if year is not None:
             d = d[d["Year"] == year]
 
-        # ---- dynamic groups from df_lookup (no hard-coding) ----
+        # dynamic groups from df_lookup (unchanged from your version)
         groups_lower: set[str] = set()
         group_label_map: dict[str, str] = {}
         if df_lookup is not None and "group" in df_lookup.columns:
             _groups = df_lookup["group"].dropna().astype(str).str.strip()
             groups_lower = set(_groups.str.lower().unique())
-            # map lower->original casing for nice labels
             group_label_map = {g.lower(): g for g in _groups.unique()}
 
-        # default: Overall Score = mean of Goal_* that exist
+        # value selection (unchanged semantics)
         if value_col is None:
             goal_cols = [c for c in d.columns if c.startswith("Goal_")]
             if not goal_cols:
                 raise ValueError("No Goal_* columns found to compute Overall Score.")
-            d = d.copy()
             d["__overall__"] = d[goal_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
             value_key = "__overall__"
             label_for_x = "Overall Score"
@@ -830,8 +831,6 @@ class ProjectKit:
             val_lower = str(value_col).strip().lower()
             label_for_x = value_col
             value_key = value_col
-
-            # handle SDG group via df_lookup (dynamic set)
             if val_lower in groups_lower:
                 if df_lookup is None or not {"group", "code"}.issubset(df_lookup.columns):
                     raise ValueError("df_lookup with 'group' and 'code' columns is required when value_col is a group name.")
@@ -842,24 +841,63 @@ class ProjectKit:
                 cols = [c for c in codes_in_group if c in d.columns]
                 if not cols:
                     raise ValueError(f"No columns for group '{value_col}' were found in the data.")
-                d = d.copy()
                 d["__group_metric__"] = d[cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
                 value_key = "__group_metric__"
                 label_for_x = group_label_map.get(val_lower, value_col.title())
 
+        # ---------------------------
+        # NEW: dimension + filtering
+        # ---------------------------
+        effective_group = "Country" if group_col is None else str(group_col)
+
+        # if group_col is a literal region name (compat), treat as "countries in that region"
+        if effective_group not in {"Country", "Region"}:
+            if "Region" not in d.columns:
+                raise ValueError("Region column not found in data.")
+            d = d[d["Region"] == effective_group]
+            if d.empty:
+                raise ValueError(f"No rows found for region '{effective_group}'.")
+            effective_group = "Country"
+            region_view = None  # already filtered by the name in group_col
+
+        if effective_group == "Region":
+            if region_view is None:
+                # original region totals behavior
+                agg_by = ["Region"]
+                y_label = "Region"
+                subtitle_extra = None
+            else:
+                # filter to chosen regions, then rank countries within
+                regs = [region_view] if isinstance(region_view, str) else list(region_view)
+                if "Region" not in d.columns:
+                    raise ValueError("Region column not found in data.")
+                d = d[d["Region"].isin(regs)]
+                if d.empty:
+                    raise ValueError("No rows after filtering to selected region(s).")
+                effective_group = "Country"
+                agg_by = ["Country"]
+                y_label = "Country (Region)" if "Region" in d.columns else "Country"
+                subtitle_extra = f"Countries in region(s): {', '.join(regs)}"
+        else:
+            # Country mode (default when group_col is None or "Country")
+            agg_by = ["Country"]
+            y_label = "Country (Region)" if "Region" in d.columns else "Country"
+            subtitle_extra = None
+
         # If ranking countries and Region exists, show "Country (Region)"
-        if group_col == "Country" and "Region" in d.columns:
-            d[group_col] = d["Country"] + " (" + d["Region"] + ")"
+        if effective_group == "Country" and "Region" in d.columns:
+            d = d.copy()
+            d["Country"] = d["Country"] + " (" + d["Region"] + ")"
 
         # aggregate
         if aggfunc == "median":
-            g = d.groupby(group_col, as_index=False)[value_key].median()
+            g = d.groupby(agg_by, as_index=False)[value_key].median()
         elif aggfunc == "max":
-            g = d.groupby(group_col, as_index=False)[value_key].max()
+            g = d.groupby(agg_by, as_index=False)[value_key].max()
         elif aggfunc == "min":
-            g = d.groupby(group_col, as_index=False)[value_key].min()
+            g = d.groupby(agg_by, as_index=False)[value_key].min()
         else:
-            g = d.groupby(group_col, as_index=False)[value_key].mean()
+            g = d.groupby(agg_by, as_index=False)[value_key].mean()
 
         g = g.sort_values(by=value_key, ascending=ascending).head(top_n)
 
@@ -872,20 +910,24 @@ class ProjectKit:
                 title_val = f"{label_for_x} group"
             else:
                 title_val = value_col
-            title = f"{rank_word} {top_n} {group_col} by {title_val}"
+            ent_label = "Region" if effective_group == "Region" else "Country"
+            title = f"{rank_word} {top_n} {ent_label}s by {title_val}"
             if year is not None:
                 title += f" • Year {year}"
+            if subtitle_extra:
+                title += f" • {subtitle_extra}"
 
         # plot
+        import plotly.express as px
         fig = px.bar(
-            g, x=value_key, y=group_col, orientation="h",
+            g, x=value_key, y=agg_by[0], orientation="h",
             text=value_key, title=title, template=plot_theme
         )
         fig.update_yaxes(autorange="reversed")
         fig.update_traces(texttemplate="%{x:.2f}", textposition="outside", cliponaxis=False)
         fig.update_layout(
             xaxis_title=label_for_x,
-            yaxis_title=group_col if group_col != "Country" else "Country (Region)",
+            yaxis_title=y_label,
             margin=dict(l=80, r=40, t=60, b=40),
             bargap=0.2,
             height=fig_height,

@@ -546,11 +546,9 @@ if page == "Ranking":
         show_plot(fig=fig, page_key="pct_change_sdg")
 
 
-
-
     elif sub == "Bar Chart (Locale)":
         #st.subheader("plot_sdg_ranking")
-        c1, c2, c3, c4, c5, c6 = st.columns(6)
+        c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
         with c1:
             years = sorted(YEARS, reverse=True)
             year = st.selectbox("Year", years, index=0, key="er_year")
@@ -559,20 +557,25 @@ if page == "Ranking":
             goal_opts = ["Overall Score", *GOAL_COLS, *GROUPS, *SDG_COLS]
             sel = st.selectbox("Goal or Group", goal_opts, index=0, key="goal_choice")
             value_col = None if sel in ("", "Overall Score") else sel
-
         with c3:
             group_col = st.selectbox("Group column", ["Country", "Region"], index=0)
         with c4:
-            top_n = st.number_input("Top N", min_value=3, max_value=50, value=10, step=1)
+            region_view_val = "region"
+            if group_col == "Region":
+                region_opts = ['All', *REGIONS]
+                region_view_val = st.selectbox("Regions", region_opts, index=0)
         with c5:
-            h = st.slider("Figure height", 400, 1200, 500, step=50, key="er_h")
+            top_n = st.number_input("Top N", min_value=3, max_value=50, value=10, step=1)
         with c6:
+            h = st.slider("Figure height", 400, 1200, 500, step=50, key="er_h")
+        with c7:
             ascending = st.checkbox("Ascending", value=False, key="er_asc")
         try:
             fig = kit.plot_sdg_ranking(
                 data=df_sdg,
                 value_col=value_col if value_col else None,
                 group_col=group_col,
+                region_view=region_view_val,
                 top_n=int(top_n),
                 ascending=ascending,
                 year=year,
