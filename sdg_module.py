@@ -103,6 +103,27 @@ class ProjectKit:
         goals = response.json()
         df_goals = pd.DataFrame(goals)[["code", "title", "description"]]
 
+        short_titles = {
+            "1":  "No Poverty",
+            "2":  "Zero Hunger",
+            "3":  "Good Health and Well-being",
+            "4":  "Quality Education",
+            "5":  "Gender Equality",
+            "6":  "Clean Water and Sanitation",
+            "7":  "Affordable and Clean Energy",
+            "8":  "Decent Work & Economic Growth",
+            "9":  "Industry, Innovation & Infrastructure",
+            "10": "Reduced Inequalities",
+            "11": "Sustainable Cities & Communities",
+            "12": "Responsible Consumption & Production",
+            "13": "Climate Action",
+            "14": "Life Below Water",
+            "15": "Life on Land",
+            "16": "Peace, Justice & Strong Institutions",
+            "17": "Partnerships for the Goals",
+        }
+        df_goals["title"] = df_goals["code"].map(short_titles).fillna(df_goals["title"])
+
         if class_code == 1: # wedding cake
             economic_codes = ["8", "9", "10", "12"]
             social_codes = ["1", "2", "3", "4", "5", "7", "11", "16"]
