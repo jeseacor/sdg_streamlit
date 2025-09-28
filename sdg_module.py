@@ -945,19 +945,20 @@ class ProjectKit:
         goal: str | None = None,     # None => Overall; or "Goal_#", "sdg*", or a group name from df_lookup["group"]
         agg: str = "mean",
         decimals: int = 2,
-        region: str | list[str] = "All Regions",  # NEW parameter
+        region: str | list[str] = "All Regions",
+        # NEW:
+        start_year: int | None = None,
+        end_year: int | None = None,
     ) -> pd.DataFrame:
         """
         Build a ranking table for countries with an optional region filter.
-
-        region:
-            "All Regions"         no filter
-            "OECD"                single region
-            ["Oceania","Africa"]  multiple regions
+        Adds a column for percent change from start_year → end_year.
+        If start_year/end_year is None, uses the min/max available years after filtering.
         """
+
         d = df_sdg.copy()
 
-        # apply region filter if not default
+        # --- region filter (unchanged) ---
         def _as_list(x):
             if x is None: return []
             return [x] if isinstance(x, str) else list(x)
@@ -974,10 +975,14 @@ class ProjectKit:
                 raise ValueError("Region column not found in df_sdg")
             d = d[d["Region"].isin(regions)]
 
+        # keep a copy across all years (after region filter) for percent-change calc
+        d_full = d.copy()
+
+        # Optional single-year slice for the ranking score
         if year is not None:
             d = d[d["Year"] == int(year)]
 
-        # derive group names dynamically from df_lookup
+        # --- derive group names dynamically from df_lookup (unchanged) ---
         group_names_lower: set[str] = set()
         group_label_lookup: dict[str, str] = {}
         if df_lookup is not None and "group" in df_lookup.columns:
@@ -985,7 +990,7 @@ class ProjectKit:
             group_names_lower = set(groups_series.str.lower().unique())
             group_label_lookup = {g.lower(): g for g in groups_series.unique()}
 
-        # label helper
+        # label helper (unchanged)
         def _score_label_from_goal(g: str | None) -> str:
             if g is None:
                 return "Overall Score"
@@ -999,13 +1004,13 @@ class ProjectKit:
 
         score_src_label = _score_label_from_goal(goal)
 
-        # build score series
-        if goal is None or str(goal).strip().lower() in {"overall", "overall score", "overall scores"}:
-            goal_cols = [c for c in d.columns if c.startswith("Goal_")]
-            if not goal_cols:
-                raise ValueError("No Goal_* columns found to compute Overall Score.")
-            score = d[goal_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
-        else:
+        # metric helper (Overall / Goal_# / group / explicit column)
+        def _metric(frame: pd.DataFrame) -> pd.Series:
+            if goal is None or str(goal).strip().lower() in {"overall", "overall score", "overall scores"}:
+                goal_cols = [c for c in frame.columns if c.startswith("Goal_")]
+                if not goal_cols:
+                    raise ValueError("No Goal_* columns found to compute Overall Score.")
+                return frame[goal_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
             g = str(goal).strip()
             gl = g.lower()
             if gl in group_names_lower:
@@ -1015,19 +1020,21 @@ class ProjectKit:
                     df_lookup.loc[df_lookup["group"].astype(str).str.strip().str.lower() == gl, "code"]
                     .dropna().astype(str).tolist()
                 )
-                cols = [c for c in codes if c in d.columns]
+                cols = [c for c in codes if c in frame.columns]
                 if not cols:
                     raise ValueError(f"No df_sdg columns matched the {g} group.")
-                score = d[cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
+                return frame[cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
             else:
-                if g not in d.columns:
+                if g not in frame.columns:
                     raise ValueError(f"Column not found: {g}")
-                score = pd.to_numeric(d[g], errors="coerce")
+                return pd.to_numeric(frame[g], errors="coerce")
 
+        # --- SCORE (original logic) ---
+        score = _metric(d)
         out = d[["Country", "Region"]].copy()
         out["Score"] = score
 
-        # aggregate across rows per entity if year not fixed
+        # aggregate across rows per entity if year not fixed (unchanged)
         if year is None:
             if agg == "median":
                 out = out.groupby(["Country", "Region"], as_index=False)["Score"].median()
@@ -1038,13 +1045,54 @@ class ProjectKit:
             else:
                 out = out.groupby(["Country", "Region"], as_index=False)["Score"].mean()
 
-        # order, rank, round, and label columns
+        # --- PERCENT CHANGE (start_year → end_year) ---
+        df_m = d_full[["Country", "Region", "Year"]].copy()
+        df_m["Metric"] = _metric(d_full)
+        df_m = df_m.dropna(subset=["Metric"])
+
+        if not df_m.empty:
+            # Resolve default window if not provided (AFTER region filter)
+            min_year = int(df_m["Year"].min())
+            max_year = int(df_m["Year"].max())
+            sy = min_year if start_year is None else int(start_year)
+            ey = max_year if end_year is None else int(end_year)
+            if sy > ey:
+                sy, ey = ey, sy  # swap if out of order
+
+            # Filter to exact endpoints and compute change; drop entities missing either endpoint
+            ds = (
+                df_m[df_m["Year"] == sy]
+                .groupby(["Country", "Region"], as_index=False)["Metric"]
+                .mean()
+                .rename(columns={"Metric": "start"})
+            )
+            de = (
+                df_m[df_m["Year"] == ey]
+                .groupby(["Country", "Region"], as_index=False)["Metric"]
+                .mean()
+                .rename(columns={"Metric": "end"})
+            )
+            pct = ds.merge(de, on=["Country", "Region"], how="inner")
+            pct["Percent Change"] = (pct["end"] - pct["start"]) / pct["start"].replace(0, np.nan) * 100.0
+            pct = pct.drop(columns=["start", "end"])
+            pct_col_name = f"Percent Change ({sy}→{ey}; {score_src_label})"
+            pct = pct.rename(columns={"Percent Change": pct_col_name})
+        else:
+            pct_col_name = f"Percent Change ({start_year}→{end_year}; {score_src_label})"
+            pct = pd.DataFrame(columns=["Country", "Region", pct_col_name])
+
+        # --- order, rank, round, label columns ---
         out = (
             out.dropna(subset=["Score"])
             .sort_values("Score", ascending=False)
             .reset_index(drop=True)
         )
         out["Score"] = out["Score"].round(decimals)
+
+        # add percent change column
+        out = out.merge(pct, on=["Country", "Region"], how="left")
+        if pct_col_name in out.columns:
+            out[pct_col_name] = out[pct_col_name].round(decimals)
 
         rank_col_name = f"Rank ({int(year)})" if year is not None else "Rank"
         score_col_name = f"Score ({score_src_label})"
@@ -1177,23 +1225,37 @@ class ProjectKit:
         df_sdg: pd.DataFrame,
         df_lookup: pd.DataFrame,
         goal: str | None = None,
-        entity_type: str = "Country",   # "Country" or "Region"
+        entity_type: str = "Country",          # "Country" or "Region"
         entities=None,
         agg: str = "mean",
         template: str = "plotly_dark",
         *,
         fig_height: int = 600,
         top_n: int | None = None,
-        top_mode: str = "top",
-        rank_year: int | None = None,
-        # NEW: when entity_type == "Region" and entities is not None
-        region_view: str = "region",    # "region" -> show selected region(s) lines; "countries" -> show all countries in selected region(s)
-    ):
+        top_mode: str = "top",                 # "top" | "bottom"
+        rank_year: int | None = None,          # used in score mode (end-year for ranking)
+        region_view: str = "region",           # (Region only) "region" = lines=regions; "countries" = lines=countries-in-region(s)
 
-        # --- resolve the series to plot ---
+        # NEW: choose how to rank which lines to keep/order
+        metric_mode: str = "score",            # "score" | "percent_change"
+        start_year: int | None = None,         # only for percent_change; default -> earliest year in filtered data
+        end_year: int | None = None,           # only for percent_change; default -> rank_year (or max year)
+    ):
+        """
+        Ranks which entities to show (and their legend order) by:
+        - metric_mode="score": level in `rank_year` (original behaviour)
+        - metric_mode="percent_change": %Δ from start_year → end_year
+
+        The plotted series is still the chosen metric over time; only the *ranking & selection*
+        of lines (top_n / bottom_n) changes.
+        """
+        import numpy as np
+        import pandas as pd
+        import plotly.express as px
+
+        # --- resolve the series to plot (Overall vs Goal_#) ---
         df = df_sdg.copy()
         is_overall = (goal is None) or (isinstance(goal, str) and goal.strip().lower() == "overall score")
-
         goal_cols = [c for c in df.columns if isinstance(c, str) and c.startswith("Goal_")]
         overall_col = None
         goal_label = "Overall Score" if is_overall else str(goal)
@@ -1210,12 +1272,11 @@ class ProjectKit:
             if target_col not in df.columns:
                 raise ValueError(f"{goal_label} is not a valid column (looked for '{target_col}')")
 
-        # --- determine entity dimension & filter ---
-        # default: keep the incoming entity_type as the plotted dimension
+        # --- determine entity dimension & filter (incl. Region→countries view) ---
         plot_entity_col = entity_type  # "Country" or "Region"
         selected_regions_for_countries = None
 
-        # normalize entities list
+        # normalize entities
         if entities is None:
             entities_list = df[entity_type].dropna().unique().tolist()
         elif isinstance(entities, str):
@@ -1223,32 +1284,27 @@ class ProjectKit:
         else:
             entities_list = list(entities)
 
-        # special mode: Region + countries
         rv = (region_view or "region").strip().lower()
         if entity_type == "Region" and entities_list:
             if rv == "countries":
-                # filter rows to the chosen regions, but plot by Country
                 if "Region" not in df.columns or "Country" not in df.columns:
                     raise ValueError("Expected columns 'Region' and 'Country' are missing.")
-                selected_regions_for_countries = entities_list[:]  # for subtitle text
+                selected_regions_for_countries = entities_list[:]
                 df = df[df["Region"].isin(entities_list)].copy()
                 if df.empty:
                     raise ValueError("No rows found for the given regions.")
                 plot_entity_col = "Country"
-                # entities_list becomes all countries in the chosen regions (for ranking/top_n logic)
                 entities_list = sorted(df["Country"].dropna().unique().tolist())
             else:
-                # normal region view (lines = selected region entities)
                 df = df[df["Region"].isin(entities_list)].copy()
                 if df.empty:
                     raise ValueError("No rows found for the given regions.")
         else:
-            # original behavior: filter by the selected entities of the given type
             df = df[df[entity_type].isin(entities_list)].copy()
             if df.empty:
                 raise ValueError("No rows found for the given entities and entity_type")
 
-        # --- metadata / titles ---
+        # --- metadata for title/sub ---
         if overall_col:
             goal_group, goal_desc = "All Goals", "Mean of Goal_1 … Goal_17 per row"
         else:
@@ -1259,48 +1315,70 @@ class ProjectKit:
                 goal_group = meta["group"].iloc[0]
                 goal_desc  = meta["description"].iloc[0]
 
-        # --- aggregation & ranking on the plotted entity dimension ---
+        # --- aggregate to (Year, Entity) and build base plot frame ---
         group_keys = ["Year", plot_entity_col]
         if agg == "median":
             df_plot = df.groupby(group_keys, as_index=False)[target_col].median()
         else:
             df_plot = df.groupby(group_keys, as_index=False)[target_col].mean()
-
         df_plot.rename(columns={target_col: "value", plot_entity_col: "Entity"}, inplace=True)
 
+        # --- decide ranking year(s) / windows ---
         ryear = int(df_plot["Year"].max()) if rank_year is None else int(rank_year)
-        df_rank = df_plot[df_plot["Year"] == ryear].dropna(subset=["value"]).copy()
-        if df_rank.empty:
-            raise ValueError(f"No data available for ranking in year {ryear}")
+        if metric_mode.strip().lower() == "percent_change":
+            sy = int(df_plot["Year"].min()) if start_year is None else int(start_year)
+            ey = int(ryear if end_year is None else end_year)
+        else:
+            sy = None
+            ey = ryear
 
+        # --- compute ranking metric per entity (score vs percent_change) ---
+        if metric_mode.strip().lower() == "percent_change":
+            s = df_plot[df_plot["Year"] == sy][["Entity", "value"]].rename(columns={"value": "start"})
+            e = df_plot[df_plot["Year"] == ey][["Entity", "value"]].rename(columns={"value": "end"})
+            rank_df = s.merge(e, on="Entity", how="inner")
+            rank_df["rank_metric"] = (rank_df["end"] - rank_df["start"]) / rank_df["start"].replace(0, np.nan) * 100.0
+            rank_basis_text = f"ranked by %Δ {sy}→{ey}"
+        else:
+            rank_df = df_plot[df_plot["Year"] == ey][["Entity", "value"]].rename(columns={"value": "rank_metric"})
+            rank_basis_text = f"ranked by score in {ey}"
+
+        # ensure we have something to rank
+        rank_df = rank_df.dropna(subset=["rank_metric"])
+        if rank_df.empty:
+            raise ValueError("No data available for ranking with the selected mode/years.")
+
+        # --- choose entities to display & legend order ---
         if top_n is not None and top_n > 0:
-            if top_mode.lower() == "bottom":
-                df_rank = df_rank.sort_values("value", ascending=True).head(top_n)
-                order_entities = df_rank.sort_values("value", ascending=True)["Entity"].tolist()
-                ttl_prefix = f"Bottom {top_n}"
-            else:
-                df_rank = df_rank.sort_values("value", ascending=False).head(top_n)
-                order_entities = df_rank.sort_values("value", ascending=False)["Entity"].tolist()
-                ttl_prefix = f"Top {top_n}"
+            asc = (top_mode or "top").strip().lower() == "bottom"
+            sel = rank_df.sort_values("rank_metric", ascending=asc).head(top_n)
+            order_entities = sel.sort_values("rank_metric", ascending=asc)["Entity"].tolist()
+            ttl_prefix = f"{'Bottom' if asc else 'Top'} {top_n}"
             df_plot = df_plot[df_plot["Entity"].isin(order_entities)].copy()
         else:
-            order_entities = sorted(df_plot["Entity"].unique())
+            # show all; order by rank_metric (desc for 'top', asc for 'bottom')
+            asc = (top_mode or "top").strip().lower() == "bottom"
+            order_entities = rank_df.sort_values("rank_metric", ascending=asc)["Entity"].tolist()
             ttl_prefix = "All"
 
+        # --- titles & labels ---
         ents_txt = ", ".join(order_entities) if len(order_entities) < 10 else f"{len(order_entities)} entities"
         title_main = f"{goal_label} ({goal_group})" if goal_group else f"{goal_label}"
 
-        # subtitle: clarify what the lines represent
         if entity_type == "Region" and rv == "countries" and selected_regions_for_countries:
             regions_txt = ", ".join(selected_regions_for_countries)
-            title_sub = f"{goal_desc}<br><sup>{ttl_prefix} — ranked on {ryear} • Countries in Region(s): {regions_txt} • {ents_txt}</sup>"
+            title_sub = (
+                f"{goal_desc}<br><sup>{ttl_prefix} — {rank_basis_text} • "
+                f"Countries in Region(s): {regions_txt} • {ents_txt}</sup>"
+            )
             legend_title = "Country"
             y_axis_title = goal_label
         else:
-            title_sub = f"{goal_desc}<br><sup>{ttl_prefix} — ranked on {ryear} • {plot_entity_col}: {ents_txt}</sup>"
-            legend_title = plot_entity_col
+            title_sub = f"{goal_desc}<br><sup>{ttl_prefix} — {rank_basis_text} • {entity_type}: {ents_txt}</sup>"
+            legend_title = entity_type
             y_axis_title = goal_label
 
+        # --- figure ---
         fig = px.line(
             df_plot, x="Year", y="value", color="Entity", markers=True,
             template=template,
@@ -1317,6 +1395,7 @@ class ProjectKit:
         )
         fig.update_xaxes(dtick=5)
 
+        # clean temp overall column if we created it
         if overall_col == "_overall_tmp_":
             df.drop(columns=[overall_col], inplace=True, errors="ignore")
 

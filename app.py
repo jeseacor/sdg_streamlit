@@ -486,7 +486,7 @@ if page == "Ranking":
 
     if sub == "Rankings":
         #st.subheader("get_ranking_table")
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         with c1:
             years = sorted(YEARS, reverse=True)
             year = st.selectbox("Year", years, index=0, key="rnk_year")
@@ -500,12 +500,18 @@ if page == "Ranking":
             goal_opts = ["All Regions", *REGIONS]
             sel = st.selectbox("Select Region", goal_opts, index=0, key="rnk_rgn_choice")
             value_reg = None if sel in ("", "All Regions") else sel            
+        with c4:
+            years_range = None
+            y0, y1 = st.select_slider("Range for % Change", options=YEARS, value=(YEARS[0], YEARS[-1]))
+            years_range = (int(y0), int(y1))            
 
         try:
             df_rank = kit.get_ranking_table(
                 df_sdg=df_sdg,
                 df_lookup=df_lookup,
                 year=year,
+                start_year=y0,
+                end_year=y1,
                 goal=value_col,
                 region=value_reg
             )
@@ -602,7 +608,6 @@ if page == "Ranking":
             h = st.slider("Figure height", 400, 1200, 600, step=50, key="gr_h")
         with c5:
             ascending = st.checkbox("Ascending", value=True, key="gr_asc")
-    
 
         try:
             fig = kit.plot_goal_ranking(
@@ -634,34 +639,39 @@ elif page == "Trends & Timelines":
     
     if sub == "Timeline (Locale)":
         #st.subheader("plot_goal_entity_timeline")
-        c1, c2, c3, c4, c5, c6 = st.columns(6)
+        c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
+            metric_value = st.selectbox("Metric mode", ["score", "percent_change"], index=0)
+            sort_value = st.selectbox("Ranking type", ["top", "bottom"], index=0)
+        with c2:
             goal_opts = ["Overall Score", *GOAL_COLS, *SDG_COLS]
             sel = st.selectbox("Goal", goal_opts, index=0, key="goal_choice")
             goal = None if sel == "" else sel   # map blank to None
-        with c2:
-            entity_type = st.selectbox("Entity type", ["Country", "Region"], index=0)
+
+            top_n = st.number_input("Top N", min_value=5, max_value=50, value=10, step=1)
         with c3:
+            entity_type = st.selectbox("Entity type", ["Country", "Region"], index=0)
+            h = st.slider("Figure height", 400, 1200, 600, step=50, key="gr_h")
+        with c4:
             entities = REGIONS if entity_type == "Region" else COUNTRIES
             picked = st.multiselect("Entities", entities)
-        with c4:
+        with c5:
             region_view_val = "region"
             if entity_type == "Region":
                 region_view_val = st.selectbox("Region View", ["region", "countries"], index=0)
-        with c5:
-            top_n = st.number_input("Top N", min_value=5, max_value=50, value=10, step=1)
-        with c6:
-            h = st.slider("Figure height", 400, 1200, 600, step=50, key="gr_h")
+            
         try:
             fig = kit.plot_goal_entity_timeline(
                 df_sdg=df_sdg,
                 df_lookup=df_lookup,
+                metric_mode=metric_value,
                 goal=goal if goal else None,
                 entity_type=entity_type,
                 entities=picked if picked else None,
                 region_view=region_view_val,
                 agg="mean",
                 fig_height=h,
+                top_mode=sort_value,
                 top_n=top_n
             )
             show_plot(fig=fig, page_key="plot_goal_entity_timeline")
