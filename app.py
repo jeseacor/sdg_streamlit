@@ -573,7 +573,7 @@ if page == "Ranking":
         with c5:
             top_n = st.number_input("Top N", min_value=3, max_value=50, value=10, step=1)
         with c6:
-            h = st.slider("Figure height", 400, 1200, 500, step=50, key="er_h")
+            h = st.slider("Figure height", 200, 1200, 500, step=50, key="er_h")
         with c7:
             ascending = st.checkbox("Ascending", value=False, key="er_asc")
         try:
