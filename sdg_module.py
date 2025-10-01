@@ -273,16 +273,31 @@ class ProjectKit:
         if "sdgi_s" in df_backdated_st.columns:
             df_backdated_st = df_backdated_st.drop(columns=["sdgi_s"])
 
-        df_sdr2025_st = df_sdr2025.copy()
-        df_sdr2025_st = df_sdr2025_st.rename(columns=lambda x: x.replace("Score_", "") if x.startswith("Score_") else x)
-        df_sdr2025_st = df_sdr2025_st[
-            ['iso3', 'Name', 'Region'] +
-            [
-                col for col in df_sdr2025_st.columns
-                if col.startswith('Goal_') and col.endswith('_Score') or col.startswith('sdg')
-            ]
-        ]
-        df_sdr2025_st = df_sdr2025_st.rename(columns=lambda x: x.replace("_Score", "") if x.endswith("_Score") else x)
+        df = df_sdr2025.copy()
+        df.replace(r'^\s*$', pd.NA, regex=True, inplace=True)
+        for i in range(1, 18):
+            gc = f"Goal_{i}_Score"    
+            gr = f"Goal_{i}_Score_reg" 
+            g_country = pd.to_numeric(df.get(gc), errors="coerce")
+            g_region  = pd.to_numeric(df.get(gr), errors="coerce")
+            df[f"Goal_{i}"] = g_country.combine_first(g_region)
+
+        goal_cols = [f"Goal_{i}" for i in range(1, 18)]
+        id_candidates = ["iso3", "ISO3", "iso", "Name", "Country", "Region", "indexreg_"]
+        id_cols = [c for c in id_candidates if c in df.columns]
+
+        score_sdg_cols = [c for c in df.columns if c.lower().startswith("score_sdg")]
+        sdg_cols       = [c for c in df.columns if c.lower().startswith("sdg")
+                        and not c.lower().startswith("score_sdg")]
+
+        cols = id_cols + goal_cols + score_sdg_cols + sdg_cols
+        seen = set()
+        cols = [c for c in cols if c in df.columns and not (c in seen or seen.add(c))]
+        df_sdr2025_st = df.loc[:, cols].copy()
+        df_sdr2025_st.rename(
+            columns=lambda c: c.replace("Score_", "", 1) if c.startswith("Score_sdg") else c,
+            inplace=True
+        )
 
         df_backdated_st = df_backdated_st.rename(columns={"id": "ID", "year": "Year", "indexreg_": "Region"})
         df_sdr2025_st = df_sdr2025_st.rename(columns={"iso3": "ID", "Name": "Country"})
