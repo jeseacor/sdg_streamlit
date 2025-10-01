@@ -1272,22 +1272,11 @@ class ProjectKit:
         rank_year: int | None = None,          # used in score mode (end-year for ranking)
         region_view: str = "region",           # (Region only) "region" = lines=regions; "countries" = lines=countries-in-region(s)
 
-        # NEW: choose how to rank which lines to keep/order
+        # choose how to rank which lines to keep/order
         metric_mode: str = "score",            # "score" | "percent_change"
-        start_year: int | None = None,         # only for percent_change; default -> earliest year in filtered data
-        end_year: int | None = None,           # only for percent_change; default -> rank_year (or max year)
+        start_year: int | None = None,         # NOW: also sets display window in all modes
+        end_year: int | None = None,           # NOW: also sets display window in all modes
     ):
-        """
-        Ranks which entities to show (and their legend order) by:
-        - metric_mode="score": level in `rank_year` (original behaviour)
-        - metric_mode="percent_change": %Δ from start_year → end_year
-
-        The plotted series is still the chosen metric over time; only the *ranking & selection*
-        of lines (top_n / bottom_n) changes.
-        """
-        import numpy as np
-        import pandas as pd
-        import plotly.express as px
 
         # --- resolve the series to plot (Overall vs Goal_#) ---
         df = df_sdg.copy()
@@ -1341,7 +1330,7 @@ class ProjectKit:
                 raise ValueError("No rows found for the given entities and entity_type")
 
         # --- metadata for title/sub ---
-        if overall_col:
+        if is_overall:
             goal_group, goal_desc = "All Goals", "Mean of Goal_1 … Goal_17 per row"
         else:
             meta = df_lookup[df_lookup["code"] == target_col][["code", "group", "description"]].drop_duplicates()
@@ -1359,25 +1348,37 @@ class ProjectKit:
             df_plot = df.groupby(group_keys, as_index=False)[target_col].mean()
         df_plot.rename(columns={target_col: "value", plot_entity_col: "Entity"}, inplace=True)
 
-        # --- decide ranking year(s) / windows ---
-        ryear = int(df_plot["Year"].max()) if rank_year is None else int(rank_year)
-        if metric_mode.strip().lower() == "percent_change":
-            sy = int(df_plot["Year"].min()) if start_year is None else int(start_year)
-            ey = int(ryear if end_year is None else end_year)
-        else:
-            sy = None
-            ey = ryear
+        # --- resolve display window (applies to ALL modes) ---
+        y_min_avail = int(df_plot["Year"].min())
+        y_max_avail = int(df_plot["Year"].max())
+        y0 = y_min_avail if start_year is None else int(start_year)
+        y1 = y_max_avail if end_year   is None else int(end_year)
+        if y0 > y1:
+            y0, y1 = y1, y0  # swap if user passed reversed bounds
+        # filter to window
+        df_plot = df_plot[(df_plot["Year"] >= y0) & (df_plot["Year"] <= y1)].copy()
+        if df_plot.empty:
+            raise ValueError("No data in the selected year window.")
 
-        # --- compute ranking metric per entity (score vs percent_change) ---
-        if metric_mode.strip().lower() == "percent_change":
+        # window bounds after filtering (in case some years are missing)
+        win_min = int(df_plot["Year"].min())
+        win_max = int(df_plot["Year"].max())
+
+        # --- decide ranking year(s)/window based on metric_mode ---
+        mm = (metric_mode or "score").strip().lower()
+        if mm == "percent_change":
+            sy, ey = win_min, win_max  # rank by Δ across the displayed window
+            rank_basis_text = f"ranked by %Δ {sy}→{ey}"
+            # compute %Δ
             s = df_plot[df_plot["Year"] == sy][["Entity", "value"]].rename(columns={"value": "start"})
             e = df_plot[df_plot["Year"] == ey][["Entity", "value"]].rename(columns={"value": "end"})
             rank_df = s.merge(e, on="Entity", how="inner")
             rank_df["rank_metric"] = (rank_df["end"] - rank_df["start"]) / rank_df["start"].replace(0, np.nan) * 100.0
-            rank_basis_text = f"ranked by %Δ {sy}→{ey}"
         else:
-            rank_df = df_plot[df_plot["Year"] == ey][["Entity", "value"]].rename(columns={"value": "rank_metric"})
+            # score mode → rank at a year inside the window (default = window end)
+            ey = int(win_max if rank_year is None else max(win_min, min(int(rank_year), win_max)))
             rank_basis_text = f"ranked by score in {ey}"
+            rank_df = df_plot[df_plot["Year"] == ey][["Entity", "value"]].rename(columns={"value": "rank_metric"})
 
         # ensure we have something to rank
         rank_df = rank_df.dropna(subset=["rank_metric"])
@@ -1385,15 +1386,13 @@ class ProjectKit:
             raise ValueError("No data available for ranking with the selected mode/years.")
 
         # --- choose entities to display & legend order ---
+        asc = (top_mode or "top").strip().lower() == "bottom"
         if top_n is not None and top_n > 0:
-            asc = (top_mode or "top").strip().lower() == "bottom"
             sel = rank_df.sort_values("rank_metric", ascending=asc).head(top_n)
             order_entities = sel.sort_values("rank_metric", ascending=asc)["Entity"].tolist()
             ttl_prefix = f"{'Bottom' if asc else 'Top'} {top_n}"
             df_plot = df_plot[df_plot["Entity"].isin(order_entities)].copy()
         else:
-            # show all; order by rank_metric (desc for 'top', asc for 'bottom')
-            asc = (top_mode or "top").strip().lower() == "bottom"
             order_entities = rank_df.sort_values("rank_metric", ascending=asc)["Entity"].tolist()
             ttl_prefix = "All"
 
@@ -1401,20 +1400,22 @@ class ProjectKit:
         ents_txt = ", ".join(order_entities) if len(order_entities) < 10 else f"{len(order_entities)} entities"
         title_main = f"{goal_label} ({goal_group})" if goal_group else f"{goal_label}"
 
+        window_txt = f"Years: {win_min}–{win_max}"
         if entity_type == "Region" and rv == "countries" and selected_regions_for_countries:
             regions_txt = ", ".join(selected_regions_for_countries)
             title_sub = (
                 f"{goal_desc}<br><sup>{ttl_prefix} — {rank_basis_text} • "
-                f"Countries in Region(s): {regions_txt} • {ents_txt}</sup>"
+                f"{window_txt} • Countries in Region(s): {regions_txt} • {ents_txt}</sup>"
             )
             legend_title = "Country"
             y_axis_title = goal_label
         else:
-            title_sub = f"{goal_desc}<br><sup>{ttl_prefix} — {rank_basis_text} • {entity_type}: {ents_txt}</sup>"
+            title_sub = f"{goal_desc}<br><sup>{ttl_prefix} — {rank_basis_text} • {window_txt} • {entity_type}: {ents_txt}</sup>"
             legend_title = entity_type
             y_axis_title = goal_label
 
         # --- figure ---
+        import plotly.express as px
         fig = px.line(
             df_plot, x="Year", y="value", color="Entity", markers=True,
             template=template,

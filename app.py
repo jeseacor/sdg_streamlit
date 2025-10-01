@@ -651,10 +651,11 @@ elif page == "Trends & Timelines":
             top_n = st.number_input("Top N", min_value=5, max_value=50, value=10, step=1)
         with c3:
             entity_type = st.selectbox("Entity type", ["Country", "Region"], index=0)
-            h = st.slider("Figure height", 400, 1200, 600, step=50, key="gr_h")
+            y0, y1 = st.select_slider("Start → End", options=YEARS, value=(YEARS[0], YEARS[-1]))
         with c4:
             entities = REGIONS if entity_type == "Region" else COUNTRIES
             picked = st.multiselect("Entities", entities)
+            h = st.slider("Figure height", 400, 1200, 600, step=50, key="gr_h")
         with c5:
             region_view_val = "region"
             if entity_type == "Region":
@@ -672,6 +673,7 @@ elif page == "Trends & Timelines":
                 agg="mean",
                 fig_height=h,
                 top_mode=sort_value,
+                start_year=int(y0), end_year=int(y1),
                 top_n=top_n
             )
             show_plot(fig=fig, page_key="plot_goal_entity_timeline")
