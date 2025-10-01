@@ -1145,16 +1145,20 @@ class ProjectKit:
         self,
         df_sdg: pd.DataFrame,
         df_lookup: pd.DataFrame,
-        items: str | list[str] | None = None, # "Goal_9", "sdg9_uni", ["Goal_1","Goal_9"], "economic", None
-        mode: str = "auto", # "goal", "sdg", or "auto"
+        items: str | list[str] | None = None,   # "Goal_9", "sdg9_uni", ["Goal_1","Goal_9"], "economic", None
+        mode: str = "auto",                      # "goal", "sdg", or "auto"
         group_filter: str | list[str] | None = None,  # "economic" | ["social","environmental"] | None
-        entity_type: str | None = None, # None, "Region", or "Country"
+        entity_type: str | None = None,          # None, "Region", or "Country"
         entities: str | list[str] | None = None, # a name or list to filter when entity_type is set
-        agg: str = "mean", # "mean" or "median"
+        agg: str = "mean",                       # "mean" or "median"
         template: str = "plotly_dark",
         p_height: int = 600,
-        title_prefix: str = "SDG timeline"
+        title_prefix: str = "SDG timeline",
+        start_year: int | None = None,
+        end_year: int | None = None,
     ):
+        import plotly.express as px
+
         def _norm_list(x):
             if x is None: return None
             return [x] if isinstance(x, str) else list(x)
@@ -1198,15 +1202,20 @@ class ProjectKit:
             codes = list(dict.fromkeys(expanded))
 
         codes = [c for c in codes if c in df_sdg.columns]
-
         if not codes:
             raise ValueError("No matching columns found in df_sdg for the given inputs (mode, groups, items).")
 
+        # --- filter by entities first ---
         df = df_sdg.copy()
+        scope_txt = ""
         if entity_type and entities:
             ents = _norm_list(entities)
             df = df[df[entity_type].isin(ents)]
+            if df.empty:
+                raise ValueError("No rows after entity filtering.")
+            scope_txt = f" • {entity_type}: {', '.join(ents[:6])}" + (" …" if len(ents) > 6 else "")
 
+        # --- long form & aggregation ---
         df_long = df[["Year"] + codes].melt("Year", var_name="code", value_name="value")
 
         if agg == "median":
@@ -1214,23 +1223,37 @@ class ProjectKit:
         else:
             df_plot = df_long.groupby(["Year", "code"], as_index=False)["value"].mean()
 
+        # --- resolve year window defaults (AFTER filters) and apply ---
+        if df_plot["Year"].empty:
+            raise ValueError("No Year values available after filtering.")
+
+        y_min_avail = int(df_plot["Year"].min())
+        y_max_avail = int(df_plot["Year"].max())
+
+        sy = y_min_avail if start_year is None else int(start_year)
+        ey = y_max_avail if end_year   is None else int(end_year)
+        if sy > ey:
+            sy, ey = ey, sy  # swap if reversed
+
+        df_plot = df_plot[(df_plot["Year"] >= sy) & (df_plot["Year"] <= ey)].copy()
+        if df_plot.empty:
+            raise ValueError("No data in the selected year window.")
+
+        # --- labels & title ---
         df_plot = df_plot.merge(look, on="code", how="left")
         df_plot["label"] = df_plot["code"] + " (" + df_plot["group"].str.capitalize().fillna("") + ")"
 
-        scope_txt = ""
-        if entity_type and entities:
-            ents = _norm_list(entities)
-            scope_txt = f" • {entity_type}: {', '.join(ents)}"
-
-        if groups:
-            group_txt = f" • Groups: {', '.join(groups)}"
-        else:
-            group_txt = ""
-
-        sel_txt = ", ".join(codes[:5]) + (" …" if len(codes) > 5 else "")
+        group_txt = f" • Groups: {', '.join(groups)}" if groups else ""
+        sel_txt = ", ".join(sorted(set(df_plot['code'])))[:120]
+        if len(set(df_plot['code'])) > 6:
+            sel_txt = ", ".join(sorted(set(df_plot['code']))[:6]) + " …"
         mode_txt = "Goals" if mode == "goal" else "SDG indicators"
+        window_txt = f"Years: {sy}–{ey}"
 
-        title = f"{title_prefix} • {mode_txt}{group_txt}{scope_txt}<br><sup>Showing: {sel_txt}</sup>"
+        title = (
+            f"{title_prefix} • {mode_txt}{group_txt}{scope_txt}"
+            f"<br><sup>{window_txt} • Showing: {sel_txt}</sup>"
+        )
 
         fig = px.line(
             df_plot, x="Year", y="value", color="label", markers=True,
@@ -1246,7 +1269,6 @@ class ProjectKit:
                 "%{customdata[2]}"
             )
         )
-
         fig.update_layout(
             xaxis_title="Year", yaxis_title="Score",
             legend_title="Series", height=p_height,
@@ -1581,10 +1603,9 @@ class ProjectKit:
 
         agg_txt = f"Aggregation: {agg}"
 
-        n_series_txt = f"Series: {len(base_cols)}"
 
         # compose subtitle parts (only include non-empty)
-        parts = [level_txt, groups_txt, items_txt, entity_txt, agg_txt, n_series_txt]
+        parts = [level_txt, groups_txt, items_txt, entity_txt, agg_txt]
         subtitle = " • ".join([p for p in parts if p])
 
         title_main = f"Percent change {start_year} → {end_year}"

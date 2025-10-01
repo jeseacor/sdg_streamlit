@@ -683,7 +683,7 @@ elif page == "Trends & Timelines":
 
     elif sub == "Timeline (SDG)":
         #st.subheader("plot_sdg_timeline")
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         with c1:
             mode = st.selectbox("Mode", ["goal", "sdg"], index=0)
             grp_filter = st.multiselect("Group filter", GROUPS)
@@ -697,11 +697,12 @@ elif page == "Trends & Timelines":
         with c3:
             #pool_codes = GOAL_COLS if (mode in ["auto", "goal"]) else SDG_COLS
             #items = st.multiselect("Items (codes or group names)", sorted(pool_codes + [g for g in GROUPS]))
+            y0, y1 = st.select_slider("Start → End", options=YEARS, value=(YEARS[0], YEARS[-1]))
             if mode == "goal":
                 items = st.multiselect("Goal", GOAL_COLS)
             elif mode == "sdg":
-                items = st.multiselect("Goal", SDG_COLS)
-
+                items = st.multiselect("Goal", SDG_COLS)       
+        with c4:
             h = st.slider("Figure height", 400, 1200, 600, step=50, key="pst_h")
 
         try:
@@ -711,6 +712,7 @@ elif page == "Trends & Timelines":
                 items=items if items else None,
                 mode=mode,
                 p_height=h,
+                start_year=int(y0), end_year=int(y1),
                 group_filter=grp_filter if grp_filter else None,
                 entity_type=None if entity_type == "None" else entity_type,
                 entities=entities if entities else None
