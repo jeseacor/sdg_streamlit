@@ -146,7 +146,7 @@ class ProjectKit:
         return df_goals
 
     # adds a group column to the lookup table based on the chosen grouping scheme. Handy when you already have a lookup of codes → SDG numbers.
-    def classify_groups(self, df_lookup : pd.DataFrame, class_code : int = 1):
+    def classify_groups(self, df_lookup : pd.DataFrame, class_code : int = 2):
         if class_code == 1:  # Wedding cake
             economic_codes = ["8", "9", "10", "12"]
             social_codes = ["1", "2", "3", "4", "5", "7", "11", "16"]
@@ -234,7 +234,7 @@ class ProjectKit:
     # the big prep step: downloads codebook + SDR datasets, builds a unified 
     # df_lookup (codes/goals/descriptions/groups) and a cleaned SDG timeseries table (df_sdg) with friendly column names. Returns (df_sdg, df_lookup).
     def get_clean_data(self):
-        df_goals = self.get_sdg_goals_grouped(class_code=1)
+        df_goals = self.get_sdg_goals_grouped(class_code=2)
         df_codebook = self.get_arcgis_data(dataset="codebook")
         df_sdr2025 = self.get_arcgis_data(dataset="sdr2025")
         df_backdated = self.get_arcgis_data(dataset="sdr_backdated")

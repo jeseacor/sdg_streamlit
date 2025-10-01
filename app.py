@@ -215,7 +215,6 @@ def youtube_autoplay(url_or_id: str, *, start=0, loop=False, height=360):
     st.components.v1.html(html, height=height, scrolling=False)
 
 
-
 # -------------------- Data Loading --------------------
 @st.cache_data(show_spinner=True)
 def load_data():
@@ -232,10 +231,18 @@ try:
     df_sdg, df_lookup = load_data()
     kit = get_kit()
     kit.set_data_for_chat(df_sdg, df_lookup)
+
+    # If the user applied custom grouping in Settings, use it
+    if "df_lookup_override" in st.session_state:
+        df_lookup = st.session_state["df_lookup_override"]
+        try:
+            kit.set_data_for_chat(df_sdg, df_lookup)  # keep chatbot context in sync
+        except Exception:
+            pass
+
 except Exception as e:
     st.error(f"Failed to load data: {e}")
     st.stop()
-
 
 
 # -------------------- Lists --------------------
@@ -244,7 +251,16 @@ COUNTRIES = sorted(df_sdg["Country"].dropna().unique().tolist())
 REGIONS = sorted(df_sdg["Region"].dropna().unique().tolist())
 GOAL_COLS = [c for c in df_sdg.columns if str(c).startswith("Goal_")]
 SDG_COLS  = [c for c in df_sdg.columns if str(c).lower().startswith("sdg") and len(c) > 3]
-GROUPS = ["economic", "social", "environmental", "partnership"]
+
+def derive_groups(df_lookup):
+    pref = ["economic", "social", "environmental"]
+    if df_lookup is None or "group" not in df_lookup.columns:
+        return pref
+    u = (df_lookup["group"].dropna().astype(str).str.lower().unique().tolist())
+    return [g for g in pref if g in u] + [g for g in u if g not in pref]
+
+GROUPS = derive_groups(df_lookup)
+st.session_state["GROUPS"] = GROUPS  # make available to all pages
 
 
 # -------------------- Sidebar Navigation --------------------
@@ -254,6 +270,7 @@ PAGES = [
     "Trends & Timelines",
     "Network & Structure",
     "Correlations",
+    "Settings",
     "About"
 ]
 
@@ -277,7 +294,7 @@ with st.sidebar:
         None,  # no title inside the menu
         PAGES,
         icons=["house", "trophy", "graph-up",
-               "diagram-3", "link-45deg", "info-circle"],
+               "diagram-3", "link-45deg", "gear", "info-circle"],
         menu_icon="cast",
         default_index=PAGES.index(st.session_state.nav_page),
         key="nav_menu",
@@ -1079,6 +1096,85 @@ elif page == "Correlations":
 
         except Exception as e:
             st.warning(f"Could not compute summary: {e}")
+
+
+
+if page == "Settings":
+    st.markdown('<div class="section-title">Settings</div>', unsafe_allow_html=True)
+    st.subheader("Goal grouping scheme")
+
+    st.write(
+        "Choose how SDG goals are grouped into economic / social / environmental / partnership. "
+        "You can preview the effect and then apply it across the app."
+    )
+
+    scheme_label = st.radio(
+        "Grouping",
+        [
+            "Barbier & Burgess (2017, World Development)",           # class_code=2
+            "Wedding cake (Stockholm Resilience ‘wedding cake’)",   # class_code=1
+        ],
+        index=0,
+        help="This updates the 'group' column in df_lookup for all goal/indicator codes."
+    )
+    class_code = 1 if scheme_label.startswith("Wedding") else 2
+
+    # Preview new grouping (does not change app state yet)
+    with st.expander("Preview changes (first 25 rows)"):
+        try:
+            preview = get_kit().classify_groups(df_lookup, class_code=class_code)
+            st.dataframe(preview.head(25), use_container_width=True, hide_index=True)
+            grp_counts = preview["group"].value_counts(dropna=False).rename_axis("group").reset_index(name="n")
+            st.caption("Count by group:")
+            st.dataframe(grp_counts, use_container_width=True, hide_index=True)
+        except Exception as e:
+            st.warning(f"Could not preview: {e}")
+
+    a, b, c = st.columns([1,1,1])
+    with a:
+        if st.button("✅ Apply grouping to app", use_container_width=True):
+            updated_lookup = get_kit().classify_groups(df_lookup, class_code=class_code)
+            updated_lookup = updated_lookup.drop_duplicates(subset=["code"]).reset_index(drop=True)
+
+            st.session_state["df_lookup_override"] = updated_lookup
+            st.session_state["GROUPS"] = derive_groups(updated_lookup)  # <-- add this
+
+            try:
+                kit.set_data_for_chat(df_sdg, updated_lookup)
+            except Exception:
+                pass
+
+            st.success("Grouping applied. All pages will use the new scheme.")
+            st.rerun()
+
+    with b:
+        if st.button("↩ Reset to default", use_container_width=True):
+            st.session_state.pop("df_lookup_override", None)
+            st.session_state["GROUPS"] = derive_groups(df_lookup)  # back to default groups
+            try:
+                kit.set_data_for_chat(df_sdg, df_lookup)  # back to default loaded values
+            except Exception:
+                pass
+            st.info("Reverted to the default grouping from data load.")
+            st.rerun()
+
+    with c:
+        if st.button("🔄 Rebuild df_lookup from source (advanced)", use_container_width=True,
+                     help="Re-download ArcGIS/UN sources and rebuild lookup via ProjectKit.get_clean_data()"):
+            try:
+                _df_sdg, _df_lookup = load_data.clear() or (None, None)  # clear cache
+            except Exception:
+                pass
+            try:
+                _df_sdg, _df_lookup = load_data()
+                st.session_state.pop("df_lookup_override", None)
+                kit.set_data_for_chat(_df_sdg, _df_lookup)
+                st.success("Data reloaded and default grouping restored.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Reload failed: {e}")
+
+
 
 elif page == "About":
 
