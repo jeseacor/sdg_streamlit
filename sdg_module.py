@@ -1448,9 +1448,9 @@ class ProjectKit:
         end_year: int,
         level: str = "goal",                 # "goal" or "sdg"
         group_filter: str | list[str] | None = None,   # economic, social, environmental, partnership
-        items: str | list[str] | None = None,          # specific codes like ["Goal_3","Goal_9"] or ["sdg9_uni", ...]
+        items: str | list[str] | None = None,          # e.g., ["Goal_3","Goal_9"] or ["sdg9_uni", ...] or group names
         entity_type: str | None = None,     # None or "Region" or "Country"
-        entities: str | list[str] | None = None,       # one or many entity names when entity_type is set
+        entities: str | list[str] | None = None,       # one/many entity names when entity_type is set
         agg: str = "mean",                  # "mean" or "median"
         decimals: int = 2,
         return_fig: bool = True,
@@ -1459,10 +1459,16 @@ class ProjectKit:
         fig_height: int = 520,
         fig_width: int = 960,
     ):
+        import numpy as np
+        import plotly.express as px
 
         def _as_list(x):
             if x is None: return None
             return [x] if isinstance(x, str) else list(x)
+
+        # keep raw inputs for title
+        groups_raw = _as_list(group_filter)
+        items_raw  = _as_list(items)
 
         # pick columns for chosen level
         lvl = level.strip().lower()
@@ -1478,16 +1484,15 @@ class ProjectKit:
         look["group"] = look["group"].astype(str).str.lower()
 
         # filter by group names if provided
-        groups = _as_list(group_filter)
-        if groups:
-            groups_lc = [g.lower() for g in groups]
+        if groups_raw:
+            groups_lc = [g.lower() for g in groups_raw]
             allowed = set(look.loc[look["group"].isin(groups_lc), "code"])
             base_cols = [c for c in base_cols if c in allowed]
 
         # filter to specific codes or group names via items, if provided
-        if items is not None:
+        if items_raw is not None:
             want = []
-            for it in _as_list(items):
+            for it in items_raw:
                 it_str = str(it)
                 if it_str.lower() in set(look["group"].unique()):
                     want += look.loc[look["group"] == it_str.lower(), "code"].tolist()
@@ -1501,6 +1506,7 @@ class ProjectKit:
 
         # slice by entities if requested
         d = df_sdg.copy()
+        ent_list = None
         if entity_type is not None and entities is not None:
             ent_list = _as_list(entities)
             if entity_type not in d.columns:
@@ -1528,18 +1534,16 @@ class ProjectKit:
             "end":   e_vals.reindex(base_cols).values.astype(float),
         })
         df_out["delta"] = df_out["end"] - df_out["start"]
-        # percent change with zero safe denom
         denom = df_out["start"].replace(0, np.nan)
         df_out["pct_change"] = (df_out["delta"] / denom) * 100.0
 
-        # attach metadata
+        # attach metadata and labels
         meta = look[["code","group","description"]].drop_duplicates()
         df_out = df_out.merge(meta, on="code", how="left")
-        # display label
+
         if lvl == "goal":
             df_out["label"] = df_out["code"]
         else:
-            # show indicator code and its goal number if available
             if "sdg" in df_lookup.columns:
                 m = df_lookup[["code","sdg"]].drop_duplicates()
                 df_out = df_out.merge(m, on="code", how="left")
@@ -1554,7 +1558,39 @@ class ProjectKit:
         df_out = df_out.round({"start": decimals, "end": decimals, "delta": decimals, "pct_change": decimals})
         df_out = df_out.sort_values("pct_change", ascending=not sort_desc).reset_index(drop=True)
 
-        # chart
+        # ------------------ dynamic title/subtitle ------------------
+        level_txt = "Goals (0–100 index)" if lvl == "goal" else "Indicators (sdg*)"
+        groups_txt = None
+        if groups_raw:
+            groups_txt = "Groups: " + ", ".join(groups_raw)
+
+        items_txt = None
+        if items_raw:
+            # show up to first 6 to keep tidy
+            if len(items_raw) <= 6:
+                items_txt = "Items: " + ", ".join(items_raw)
+            else:
+                items_txt = f"Items: {len(items_raw)} selected"
+
+        entity_txt = None
+        if entity_type and ent_list:
+            if len(ent_list) <= 6:
+                entity_txt = f"{entity_type}: " + ", ".join(ent_list)
+            else:
+                entity_txt = f"{entity_type}: {len(ent_list)} selected"
+
+        agg_txt = f"Aggregation: {agg}"
+
+        n_series_txt = f"Series: {len(base_cols)}"
+
+        # compose subtitle parts (only include non-empty)
+        parts = [level_txt, groups_txt, items_txt, entity_txt, agg_txt, n_series_txt]
+        subtitle = " • ".join([p for p in parts if p])
+
+        title_main = f"Percent change {start_year} → {end_year}"
+
+        # ------------------------------------------------------------
+
         fig = None
         if return_fig:
             fig = px.bar(
@@ -1563,7 +1599,7 @@ class ProjectKit:
                 orientation="h",
                 text="pct_change",
                 template=template,
-                title=f"Percent change {start_year} to {end_year} • level {level}",
+                title=title_main + (f"<br><sup>{subtitle}</sup>" if subtitle else ""),
                 custom_data=["description","group","start","end","delta"]
             )
             fig.update_traces(
@@ -1580,20 +1616,16 @@ class ProjectKit:
                 margin=dict(l=80, r=30, t=70, b=40)
             )
             vals = df_out["pct_change"].astype(float)
-            
-            # symmetric range around 0
-            maxabs = float(np.nanmax(np.abs(vals)))
-            pad = max(1.0, maxabs * 0.08)         # little breathing room
+
+            # symmetric range around 0 with padding
+            maxabs = float(np.nanmax(np.abs(vals))) if len(vals) else 0.0
+            pad = max(1.0, maxabs * 0.08)
             fig.update_xaxes(
                 range=[-(maxabs + pad), (maxabs + pad)],
                 zeroline=True, zerolinewidth=2, zerolinecolor="#888",
-                ticksuffix="%"                     # optional: show % on axis ticks
+                ticksuffix="%"
             )
-            
-            # emphasize the center line (works even if theme hides zeroline)
             fig.add_vline(x=0, line_width=2, line_color="#999", opacity=0.7)
-            
-            # keep labels tidy when values are negative
             fig.update_traces(
                 textposition=["outside" if v >= 0 else "inside" for v in vals],
                 insidetextanchor="start",
@@ -1601,7 +1633,6 @@ class ProjectKit:
             )
 
         return df_out, fig
-
 
 
 
