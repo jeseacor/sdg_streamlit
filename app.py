@@ -548,13 +548,11 @@ if page == "Ranking":
         with c4:
             entity_type = st.selectbox("Entity type", ["All", "Region", "Country"], index=0)
         with c5:
-            sort_desc = st.checkbox("Sort high → low", value=False)
-
-        entities = []
-        if entity_type == "Region":
-            entities = st.multiselect("Pick regions", REGIONS)
-        elif entity_type == "Country":
-            entities = st.multiselect("Pick countries", COUNTRIES)
+            entities = []
+            if entity_type == "Region":
+                entities = st.multiselect("Pick regions", REGIONS)
+            elif entity_type == "Country":
+                entities = st.multiselect("Pick countries", COUNTRIES)
 
         df_pct, fig = kit.pct_change_sdg(
             df_sdg=df_sdg, df_lookup=df_lookup,
@@ -563,7 +561,7 @@ if page == "Ranking":
             group_filter=group_filter if group_filter else None,
             entity_type=None if entity_type == "All" else entity_type,
             entities=entities if entities else None,
-            sort_desc=sort_desc,
+            sort_desc=False,
             return_fig=True,
         )
         show_plot(fig=fig, page_key="pct_change_sdg")

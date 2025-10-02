@@ -1639,13 +1639,26 @@ class ProjectKit:
             vals = df_out["pct_change"].astype(float)
 
             # symmetric range around 0 with padding
-            maxabs = float(np.nanmax(np.abs(vals))) if len(vals) else 0.0
-            pad = max(1.0, maxabs * 0.08)
+            #maxabs = float(np.nanmax(np.abs(vals))) if len(vals) else 0.0
+            #pad = max(1.0, maxabs * 0.08)
+            #fig.update_xaxes(
+            #    range=[-(maxabs + pad), (maxabs + pad)],
+            #    zeroline=True, zerolinewidth=2, zerolinecolor="#888",
+            #    ticksuffix="%"
+            #)
+
+            # min–max range (not centered), with padding
+            vmin = float(np.nanmin(vals)) if len(vals) else 0.0
+            vmax = float(np.nanmax(vals)) if len(vals) else 0.0
+            span = vmax - vmin
+            pad = max(1.0, span * 0.08)  # ~8% padding (at least 1 percentage point)
+
             fig.update_xaxes(
-                range=[-(maxabs + pad), (maxabs + pad)],
+                range=[vmin - pad, vmax + pad],
                 zeroline=True, zerolinewidth=2, zerolinecolor="#888",
                 ticksuffix="%"
             )
+
             fig.add_vline(x=0, line_width=2, line_color="#999", opacity=0.7)
             fig.update_traces(
                 textposition=["outside" if v >= 0 else "inside" for v in vals],
@@ -1926,18 +1939,26 @@ class ProjectKit:
         template: str = "plotly_dark",
         zmin: float = -1.0,
         zmax: float = 1.0,
-        indicator_mode: bool = False, # False → use Goal_*; True → use sdg* indicators
+        indicator_mode: bool = False,  # False → use Goal_*; True → use sdg* indicators
         title: str = "Cross-Group SDG Correlations",
-        n_cols: int = 3, # number of subplot columns
+        n_cols: int = 3,
         fig_height: int = 400,
-        fig_width: int = 360
+        fig_width: int = 360,
+        # NEW:
+        show_values: bool = True,
+        value_fmt: str = ".2f",
+        value_text_size: int = 10,
+        value_text_color: str = "white",
     ):
+        import numpy as np
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
 
         d = df_sdg[df_sdg["Year"] == year].copy()
 
         if indicator_mode:
             value_cols = [c for c in d.columns if isinstance(c, str) and c.lower().startswith("sdg")]
-            kind_name = "Indicators"
+            kind_name = "Goals" if False else "Indicators"
         else:
             value_cols = [c for c in d.columns if isinstance(c, str) and c.startswith("Goal_")]
             kind_name = "Goals"
@@ -1949,7 +1970,8 @@ class ProjectKit:
         meta["group"] = meta["group"].str.lower()
         code_to_group = dict(zip(meta["code"], meta["group"]))
 
-        value_cols = [c for c in value_cols if code_to_group.get(c, None) in {"economic","social","environmental","partnership"}]
+        value_cols = [c for c in value_cols
+                    if code_to_group.get(c, None) in {"economic", "social", "environmental", "partnership"}]
         if not value_cols:
             raise ValueError("No columns matched to (economic/social/environmental/partnership) groups.")
 
@@ -1959,8 +1981,11 @@ class ProjectKit:
         rows = -(-n // n_cols)
         cols = min(n_cols, n)
 
-        fig = make_subplots(rows=rows, cols=cols, horizontal_spacing=0.08, vertical_spacing=0.12,
-                            subplot_titles=[f"{a.title()} ↔ {b.title()}" for (a,b) in group_pairs])
+        fig = make_subplots(
+            rows=rows, cols=cols,
+            horizontal_spacing=0.08, vertical_spacing=0.12,
+            subplot_titles=[f"{a.title()} ↔ {b.title()}" for (a, b) in group_pairs]
+        )
 
         coloraxis_name = "coloraxis"
 
@@ -1968,28 +1993,42 @@ class ProjectKit:
             r, c = divmod(i, n_cols)
             r, c = r + 1, c + 1
 
-            codes_a = [c for c in value_cols if code_to_group.get(c) == ga]
-            codes_b = [c for c in value_cols if code_to_group.get(c) == gb]
+            codes_a = [col for col in value_cols if code_to_group.get(col) == ga]
+            codes_b = [col for col in value_cols if code_to_group.get(col) == gb]
 
             if not codes_a or not codes_b:
-                fig.add_trace(
-                    go.Heatmap(z=[[np.nan]], x=["—"], y=["—"], showscale=False),
-                    row=r, col=c
-                )
+                fig.add_trace(go.Heatmap(z=[[np.nan]], x=["—"], y=["—"], showscale=False), row=r, col=c)
                 continue
 
-            sub_z = corr.loc[codes_a, codes_b].values
+            sub = corr.loc[codes_a, codes_b]
+            z = sub.values
+
+            # NEW: text labels for cell values
+            text = None
+            texttemplate = None
+            textfont = None
+            if show_values:
+                fmt = "{:" + value_fmt + "}"
+                text = np.where(np.isfinite(z), np.vectorize(lambda v: fmt.format(v))(z), "")
+                texttemplate = "%{text}"
+                textfont = dict(size=value_text_size, color=value_text_color)
+
             fig.add_trace(
                 go.Heatmap(
-                    z=sub_z,
+                    z=z,
                     x=codes_b,
                     y=codes_a,
                     zmin=zmin, zmax=zmax,
                     coloraxis=coloraxis_name,
-                    hovertemplate="<b>%{y}</b> ↔ <b>%{x}</b><br>corr: %{z:.2f}<extra></extra>"
+                    hovertemplate="<b>%{y}</b> ↔ <b>%{x}</b><br>corr: %{z:.2f}<extra></extra>",
+                    # NEW:
+                    text=text,
+                    texttemplate=texttemplate,
+                    textfont=textfont
                 ),
                 row=r, col=c
             )
+
             fig.update_xaxes(showgrid=False, tickangle=-90, row=r, col=c)
             fig.update_yaxes(showgrid=False, autorange="reversed", row=r, col=c)
 
