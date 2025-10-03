@@ -1698,7 +1698,9 @@ class ProjectKit:
         start_year: int | None = None,      # None -> min available
         end_year: int | None = None,        # None -> max available
         measure: str | None = None,         # None/"Overall Score", or "Goal_#", or group name
-        label_top: int = 5
+        label_top: int = 5,
+        fig_height: int = 520,
+        fig_width: int | None = None
     ):
         d = df_sdg.copy()
 
@@ -1761,32 +1763,27 @@ class ProjectKit:
             default="Laggard"
         )
 
-        # 6) Label a few extremes
+        # before plotting
         lab = set(out.sort_values("pct_change", ascending=False).head(label_top)["Country"])
         lab |= set(out.sort_values("pct_change", ascending=True).head(label_top)["Country"])
         out["label"] = np.where(out["Country"].isin(lab), out["Country"], "")
 
-        # 7) Plot
         fig = px.scatter(
-            out, x="end", y="pct_change", color="bucket", text="label",
+            out, x="end", y="pct_change", color="bucket",
+            text="label",               # <- only selected names show
+            hover_name="Country",
+            hover_data={"Region": True, "start":":.2f", "end":":.2f", "pct_change":":.2f"},
+            height=fig_height,
+            width=fig_width,
+            title=f"Leaders & Laggards — {region_title} • {label} • {start_year}→{end_year}",
             labels={"end": f"{label} (end year)", "pct_change": f"% change {start_year}→{end_year}"},
-            title=f"Leaders & Laggards — {region_title} • {label} • {start_year}→{end_year}"
         )
+        fig.update_traces(textposition="top center", marker_size=10, cliponaxis=False)
+        fig.update_layout(hovermode="closest", hoverlabel=dict(namelength=-1), legend_title_text="Quadrant")
+
         fig.add_vline(x=x_med, line_dash="dot", line_color="#888")
         fig.add_hline(y=y_med, line_dash="dot", line_color="#888")
-
-        hover_tmpl = (
-            "<b>%{customdata[0]}</b><br>"
-            f"{label} (end): %{{x:.2f}}<br>"
-            f"% change {start_year}→{end_year}: %{{y:.2f}}%<extra></extra>"
-        )
-        fig.update_traces(
-            marker_size=12,
-            textposition="top center",
-            hovertemplate=hover_tmpl,
-            customdata=np.stack([out["Country"].to_numpy()], axis=-1),
-        )
-        fig.update_layout(legend_title_text="Quadrant")
+        fig.update_traces(marker_size=10, textposition="top center")
 
         # 8) Sorted table (descending by pct_change) with Region included
         table = (out[["Region", "Country", "start", "end", "pct_change", "bucket"]]
@@ -1795,9 +1792,6 @@ class ProjectKit:
                 .reset_index(drop=True))
 
         return fig, table
-
-
-
 
 
 

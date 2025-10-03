@@ -576,26 +576,33 @@ if page == "Ranking":
     elif sub == "Quadrant Scatter (Level vs Momentum)":
         c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
-            y0, y1 = st.select_slider("Start → End", options=YEARS, value=(YEARS[0], YEARS[-1]))
-        with c2:
             #value_col = st.selectbox("Goal/SDG or Group)", sorted(GOAL_COLS + SDG_COLS + GROUPS))
             goal_opts = ["Overall Score", *GOAL_COLS, *GROUPS, *SDG_COLS]
             sel = st.selectbox("Goal or Group", goal_opts, index=0, key="quad_goal_choice")
             value_col = None if sel in ("", "Overall Score") else sel
-        with c3:
+        with c2:
             #value_col = st.selectbox("Goal/SDG or Group)", sorted(GOAL_COLS + SDG_COLS + GROUPS))
             goal_opts = ["All Regions", *REGIONS]
             sel = st.selectbox("Select Region", goal_opts, index=0, key="quad_rgn_choice")
-            value_reg = None if sel in ("", "All Regions") else sel            
+            value_reg = None if sel in ("", "All Regions") else sel
+        with c3:
+            top_n = st.number_input("Show Top/Bottom N", min_value=5, max_value=50, value=5, step=1)
+        with c4:
+            y0, y1 = st.select_slider("Start → End", options=YEARS, value=(YEARS[0], YEARS[-1]))
+        with c5:
+            h = st.slider("Figure height", 200, 1200, 500, step=50, key="quad_h") 
 
         fig_scat, tbl_scat = kit.leaders_laggards_scatter(
             df_sdg=df_sdg, df_lookup=df_lookup,
             start_year=int(y0), end_year=int(y1),
             region=value_reg,
-            measure=value_col
+            measure=value_col,
+            label_top=top_n,
+            fig_height=h
         )
         show_plot(fig=fig_scat, page_key="leaders_laggards_scatter")
 
+        st.dataframe(tbl_scat)
 
     elif sub == "Bar Chart (Locale)":
         #st.subheader("plot_sdg_ranking")
