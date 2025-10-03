@@ -610,7 +610,10 @@ if page == "Ranking":
             years = sorted(YEARS, reverse=True)
             year = st.selectbox("Year", years, index=0, key="bench_year")
         with c2:
-            country_val = st.selectbox("Countries", COUNTRIES, index=0)
+            options = sorted(df_sdg["Country"].dropna().unique().tolist())
+            # default to "New Zealand" if it exists, else fall back to the first option
+            default_idx = next((i for i, v in enumerate(options) if v == "New Zealand"), 0)
+            country_val = st.selectbox("Country", options, index=default_idx, key="country_select")
         with c3:
             bench = st.selectbox("Benchmark", ["top_quartile", "median"], index=0)
         with c4:
