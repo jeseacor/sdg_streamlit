@@ -3134,6 +3134,123 @@ class ProjectKit:
         return fig
 
 
+    def plot_gap_dumbbell_sdg(
+        self,
+        df_sdg: pd.DataFrame,
+        country: str,
+        year: int = 2025,
+        region_benchmark: bool = True,          # True => use the country's region; False => all regions
+        benchmark: str = "top_quartile",        # "top_quartile" or "median"
+        show_gap_labels: bool = True,
+        label_offset_frac: float = 0.018,
+        label_yshift: int = -8
+    ):
+        # ---- get country row ----
+        row = df_sdg[(df_sdg["Country"] == country) & (df_sdg["Year"] == year)]
+        if row.empty:
+            raise ValueError(f"No row in df_sdg for Country='{country}' and Year={year}.")
+        row = row.iloc[0]
+        country_region = row["Region"]
+
+        # ---- benchmark pool ----
+        if region_benchmark:
+            pool = df_sdg[(df_sdg["Region"] == country_region) & (df_sdg["Year"] == year)]
+            pool_label = country_region                      # <- for title & legend
+        else:
+            pool = df_sdg[df_sdg["Year"] == year]
+            pool_label = "all regions"                       # <- for title & legend
+
+        # ---- compute per-goal benchmark ----
+        goal_cols = [c for c in df_sdg.columns if str(c).startswith("Goal_")]
+        country_vals = row[goal_cols].astype(float)
+
+        if benchmark == "top_quartile":
+            bench_vals = pool[goal_cols].astype(float).quantile(0.75, axis=0)
+            bench_label = "top-quartile"
+        elif benchmark == "median":
+            bench_vals = pool[goal_cols].astype(float).median(axis=0)
+            bench_label = "median"
+        else:
+            raise ValueError("benchmark must be 'top_quartile' or 'median'.")
+
+        out = pd.DataFrame({
+            "goal_label": goal_cols,
+            "country_score": country_vals.values,
+            "benchmark": bench_vals.values
+        }).dropna()
+
+        out["gap_points"] = out["benchmark"] - out["country_score"]
+        out["gap_pct"] = np.where(out["benchmark"] > 0,
+                                (out["gap_points"] / out["benchmark"]) * 100, np.nan)
+        out = out.sort_values("gap_points", ascending=False, kind="mergesort").reset_index(drop=True)
+
+        # ---- figure ----
+        fig = go.Figure()
+
+        # lines
+        for _, r in out.iterrows():
+            fig.add_trace(go.Scatter(
+                x=[r["country_score"], r["benchmark"]],
+                y=[r["goal_label"], r["goal_label"]],
+                mode="lines",
+                line=dict(color="rgba(50,50,50,0.45)", width=3),
+                hoverinfo="skip",
+                showlegend=False
+            ))
+
+        # markers
+        fig.add_trace(go.Scatter(
+            x=out["country_score"], y=out["goal_label"],
+            mode="markers",
+            marker=dict(color="#2c7be5", size=8),
+            name=country,  # legend
+            hovertemplate="<b>%{y}</b><br>"+country+": %{x:.1f}<extra></extra>",
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=out["benchmark"], y=out["goal_label"],
+            mode="markers",
+            marker=dict(color="#e55353", size=8, symbol="diamond"),
+            # legend shows both the statistic and the pool:
+            name=f"{bench_label} ({pool_label})",
+            hovertemplate=f"<b>%{{y}}</b><br>{bench_label} ({pool_label}): %{{x:.1f}}<extra></extra>",
+        ))
+
+        # axis range (no centering)
+        xmin = float(np.nanmin(np.r_[out["country_score"], out["benchmark"]]))
+        xmax = float(np.nanmax(np.r_[out["country_score"], out["benchmark"]]))
+        pad = max(1.0, 0.05 * (xmax - xmin))
+        fig.update_xaxes(range=[xmin - pad, xmax + 9 * pad])
+        fig.update_yaxes(autorange="reversed")
+
+        # labels outside right side
+        if show_gap_labels:
+            span = xmax - xmin
+            x_off = label_offset_frac * span
+            for _, r in out.iterrows():
+                lbl_x = max(float(r["country_score"]), float(r["benchmark"])) + x_off
+                txt = f"{r['gap_points']:.1f} pts"
+                if np.isfinite(r["gap_pct"]): txt += f" ({r['gap_pct']:.0f}%)"
+                fig.add_annotation(
+                    x=lbl_x, y=r["goal_label"], xref="x", yref="y",
+                    text=txt, showarrow=False, xanchor="left", yshift=label_yshift,
+                    bgcolor="rgba(255,255,255,0.85)", bordercolor="rgba(0,0,0,0.25)",
+                    borderwidth=1, font=dict(size=12), align="left"
+                )
+
+        # title includes region/all-regions choice
+        title = (f"{country} {year} — Gap to {bench_label} ({pool_label}) by Goal (Dumbbell)"
+                f"<br><sup>Labels show gap in points and % of benchmark; ordered by largest shortfall.</sup>")
+        fig.update_layout(
+            title=dict(text=title, x=0.5, xanchor="center"),
+            legend_title_text="",
+            xaxis_title="Score (0–100)",
+            margin=dict(t=100, r=40, b=40, l=120),
+            template="plotly_white"
+        )
+
+        return fig, out
+
 
 
 

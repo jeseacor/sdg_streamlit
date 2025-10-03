@@ -502,7 +502,7 @@ if page == "Ranking":
 
     sub = st.segmented_control(
         "",
-        ["Rankings", "Percent Change", "Quadrant Scatter (Level vs Momentum)", "Bar Chart (Locale)", "Bar Chart (SDG)"], default="Rankings",
+        ["Rankings", "Percent Change", "Quadrant Scatter", "Benchmark Gaps", "Bar Chart"], default="Rankings",
         key="ranking_view",
     )
 
@@ -573,7 +573,7 @@ if page == "Ranking":
         )
         show_plot(fig=fig, page_key="pct_change_sdg")
 
-    elif sub == "Quadrant Scatter (Level vs Momentum)":
+    elif sub == "Quadrant Scatter":
         c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
             #value_col = st.selectbox("Goal/SDG or Group)", sorted(GOAL_COLS + SDG_COLS + GROUPS))
@@ -604,78 +604,111 @@ if page == "Ranking":
 
         st.dataframe(tbl_scat)
 
-    elif sub == "Bar Chart (Locale)":
-        #st.subheader("plot_sdg_ranking")
-        c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
+    elif sub == "Benchmark Gaps":
+        c1, c2, c3, c4 = st.columns(4)
         with c1:
             years = sorted(YEARS, reverse=True)
-            year = st.selectbox("Year", years, index=0, key="er_year")
+            year = st.selectbox("Year", years, index=0, key="bench_year")
         with c2:
-            #value_col = st.selectbox("Goal/SDG or Group)", sorted(GOAL_COLS + SDG_COLS + GROUPS))
-            goal_opts = ["Overall Score", *GOAL_COLS, *GROUPS, *SDG_COLS]
-            sel = st.selectbox("Goal or Group", goal_opts, index=0, key="goal_choice")
-            value_col = None if sel in ("", "Overall Score") else sel
+            country_val = st.selectbox("Countries", COUNTRIES, index=0)
         with c3:
-            group_col = st.selectbox("Group column", ["Country", "Region"], index=0)
+            bench = st.selectbox("Benchmark", ["top_quartile", "median"], index=0)
         with c4:
-            region_view_val = "region"
-            if group_col == "Region":
-                region_opts = ['All', *REGIONS]
-                region_view_val = st.selectbox("Regions", region_opts, index=0)
-        with c5:
-            top_n = st.number_input("Top N", min_value=3, max_value=50, value=10, step=1)
-        with c6:
-            h = st.slider("Figure height", 200, 1200, 500, step=50, key="er_h")
-        with c7:
-            ascending = st.checkbox("Ascending", value=False, key="er_asc")
-        try:
-            fig = kit.plot_sdg_ranking(
-                data=df_sdg,
-                value_col=value_col if value_col else None,
-                group_col=group_col,
-                region_view=region_view_val,
-                top_n=int(top_n),
-                ascending=ascending,
-                year=year,
-                df_lookup=df_lookup,
-                fig_height=h,
-                fig_width=1100,
-            )
-            show_plot(fig=fig, page_key="plot_sdg_ranking")
+            use_region_benchmark = st.toggle("Benchmark within region", value=True)
 
-        except Exception as e:
-            st.warning(f"Could not render: {e}")
+        fig_bench, tbl_bench = kit.plot_gap_dumbbell_sdg(
+            df_sdg=df_sdg,
+            year=year,
+            country=country_val,
+            benchmark=bench,
+            region_benchmark=use_region_benchmark,
+        )
+        show_plot(fig=fig_bench, page_key="plot_gap_dumbbell_sdg")
+
+        st.dataframe(tbl_bench)
 
 
-    elif sub == "Bar Chart (SDG)":
-        #st.subheader("plot_goal_ranking")
-        c1, c2, c3, c4, c5 = st.columns(5)
-        with c1:
-            year = st.selectbox("Year", YEARS, index=len(YEARS)-1, key="gr_year")
-        with c2:
-            rank_by = st.selectbox("Rank by", ["goal", "sdg", "group"], index=0, key="gr_rankby")
-        with c3:
-            group_filter = st.multiselect("Filter groups (optional)", GROUPS, key="gr_groups") if rank_by != "group" else []
-        with c4:
-            h = st.slider("Figure height", 400, 1200, 600, step=50, key="gr_h")
-        with c5:
-            ascending = st.checkbox("Ascending", value=True, key="gr_asc")
+    elif sub == "Bar Chart":
+        #view_mode = st.selectbox("View Mode", ["Locale", "Goals"], index=0)
+        view_mode = st.radio(
+            "View mode",
+            ["Locale", "Goals"],
+            index=0,
+            horizontal=True,   # optional: put options on one line
+            key="view_mode"
+        )        
 
-        try:
-            fig = kit.plot_goal_ranking(
-                df_sdg=df_sdg,
-                df_lookup=df_lookup,
-                year=year,
-                rank_by=rank_by,
-                group_filter=group_filter if group_filter else None,
-                ascending=ascending,
-                fig_height=h,
-                fig_width=1100,
-            )
-            show_plot(fig=fig, page_key="plot_goal_ranking")
+        if view_mode == "Locale":
+            #st.subheader("plot_sdg_ranking")
+            c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
+            with c1:
+                years = sorted(YEARS, reverse=True)
+                year = st.selectbox("Year", years, index=0, key="er_year")
+            with c2:
+                #value_col = st.selectbox("Goal/SDG or Group)", sorted(GOAL_COLS + SDG_COLS + GROUPS))
+                goal_opts = ["Overall Score", *GOAL_COLS, *GROUPS, *SDG_COLS]
+                sel = st.selectbox("Goal or Group", goal_opts, index=0, key="goal_choice")
+                value_col = None if sel in ("", "Overall Score") else sel
+            with c3:
+                group_col = st.selectbox("Group column", ["Country", "Region"], index=0)
+            with c4:
+                region_view_val = "region"
+                if group_col == "Region":
+                    region_opts = ['All', *REGIONS]
+                    region_view_val = st.selectbox("Regions", region_opts, index=0)
+            with c5:
+                top_n = st.number_input("Top N", min_value=3, max_value=50, value=10, step=1)
+            with c6:
+                h = st.slider("Figure height", 200, 1200, 500, step=50, key="er_h")
+            with c7:
+                ascending = st.checkbox("Ascending", value=False, key="er_asc")
+            try:
+                fig = kit.plot_sdg_ranking(
+                    data=df_sdg,
+                    value_col=value_col if value_col else None,
+                    group_col=group_col,
+                    region_view=region_view_val,
+                    top_n=int(top_n),
+                    ascending=ascending,
+                    year=year,
+                    df_lookup=df_lookup,
+                    fig_height=h,
+                    fig_width=1100,
+                )
+                show_plot(fig=fig, page_key="plot_sdg_ranking")
 
-        except Exception as e:
-            st.warning(f"Could not render: {e}")
+            except Exception as e:
+                st.warning(f"Could not render: {e}")
+
+        elif view_mode == "Goals":
+            #st.subheader("plot_goal_ranking")
+            c1, c2, c3, c4, c5 = st.columns(5)
+            with c1:
+                year = st.selectbox("Year", YEARS, index=len(YEARS)-1, key="gr_year")
+            with c2:
+                rank_by = st.selectbox("Rank by", ["goal", "sdg", "group"], index=0, key="gr_rankby")
+            with c3:
+                group_filter = st.multiselect("Filter groups (optional)", GROUPS, key="gr_groups") if rank_by != "group" else []
+            with c4:
+                h = st.slider("Figure height", 400, 1200, 600, step=50, key="gr_h")
+            with c5:
+                ascending = st.checkbox("Ascending", value=True, key="gr_asc")
+
+            try:
+                fig = kit.plot_goal_ranking(
+                    df_sdg=df_sdg,
+                    df_lookup=df_lookup,
+                    year=year,
+                    rank_by=rank_by,
+                    group_filter=group_filter if group_filter else None,
+                    ascending=ascending,
+                    fig_height=h,
+                    fig_width=1100,
+                )
+                show_plot(fig=fig, page_key="plot_goal_ranking")
+
+            except Exception as e:
+                st.warning(f"Could not render: {e}")
 
 
 elif page == "Trends & Timelines":
