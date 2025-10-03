@@ -1669,6 +1669,136 @@ class ProjectKit:
         return df_out, fig
 
 
+    def _compute_metric(self, d, df_lookup, measure):
+        """Return a Series named 'value' for Overall / Goal_# / group name."""
+        if (measure is None) or (str(measure).lower() in ("overall", "overall score")):
+            goal_cols = [c for c in d.columns if c.startswith("Goal_")]
+            v = d[goal_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
+            return v.rename("value"), "Overall Score"
+
+        # group name?
+        if "group" in df_lookup.columns:
+            groups_lower = df_lookup["group"].astype(str).str.lower().unique()
+            if str(measure).lower() in groups_lower:
+                codes = (df_lookup.loc[
+                    df_lookup["group"].astype(str).str.lower() == str(measure).lower(), "code"
+                ].astype(str).tolist())
+                cols = [c for c in codes if c in d.columns]
+                v = d[cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
+                return v.rename("value"), str(measure).title()
+
+        # otherwise assume an existing column (Goal_* or sdg*)
+        v = pd.to_numeric(d[measure], errors="coerce")
+        return v.rename("value"), str(measure)
+
+    def leaders_laggards_scatter(
+        self,
+        df_sdg, df_lookup, *,
+        region: str | None = None,          # None / "All Regions" -> no region filter
+        start_year: int | None = None,      # None -> min available
+        end_year: int | None = None,        # None -> max available
+        measure: str | None = None,         # None/"Overall Score", or "Goal_#", or group name
+        label_top: int = 5
+    ):
+        d = df_sdg.copy()
+
+        # 1) Region filter (optional)
+        if region and str(region).lower() not in ("all regions", "all", "none"):
+            d = d[d["Region"] == region]
+            region_title = str(region)
+        else:
+            region_title = "All Regions"
+
+        # 2) Resolve year bounds from the (possibly region-filtered) data
+        yrs = d["Year"].dropna().astype(int)
+        if yrs.empty:
+            raise ValueError("No years available after filtering; check your inputs.")
+        if start_year is None:
+            start_year = int(yrs.min())
+        if end_year is None:
+            end_year = int(yrs.max())
+        if start_year > end_year:
+            start_year, end_year = end_year, start_year
+
+        d = d[d["Year"].between(start_year, end_year)]
+
+        # 3) Metric (Overall / Goal / Group)
+        d["value"], label = self._compute_metric(d, df_lookup, measure)
+
+        # 4) Country-year metric and start/end collapse
+        g = (d.groupby(["Country", "Year"], as_index=False)["value"]
+            .mean(numeric_only=True))
+
+        piv = g.pivot(index="Country", columns="Year", values="value")
+
+        # map Region per Country (mode over the filtered rows)
+        region_map = (d.groupby("Country")["Region"]
+                        .agg(lambda s: s.dropna().mode().iat[0] if not s.dropna().mode().empty else s.iloc[0]))
+
+        out = (pd.DataFrame({
+                    "Country": piv.index,
+                    "start": piv.loc[:, piv.columns.min()],
+                    "end":   piv.loc[:, piv.columns.max()],
+                })
+                .assign(Region=lambda x: x["Country"].map(region_map))
+                .dropna(subset=["start", "end"])
+            )
+
+        out["pct_change"] = (out["end"] - out["start"]) / out["start"] * 100.0
+        out.replace([np.inf, -np.inf], np.nan, inplace=True)
+        out.dropna(subset=["pct_change"], inplace=True)
+
+        # 5) Quadrants (medians over the plotted subset)
+        x_med = out["end"].median()
+        y_med = out["pct_change"].median()
+        out["bucket"] = np.select(
+            [
+                (out["end"] >= x_med) & (out["pct_change"] >= y_med),
+                (out["end"] >= x_med) & (out["pct_change"] <  y_med),
+                (out["end"] <  x_med) & (out["pct_change"] >= y_med),
+            ],
+            ["Leader", "Stable/Slipping", "Emerging"],
+            default="Laggard"
+        )
+
+        # 6) Label a few extremes
+        lab = set(out.sort_values("pct_change", ascending=False).head(label_top)["Country"])
+        lab |= set(out.sort_values("pct_change", ascending=True).head(label_top)["Country"])
+        out["label"] = np.where(out["Country"].isin(lab), out["Country"], "")
+
+        # 7) Plot
+        fig = px.scatter(
+            out, x="end", y="pct_change", color="bucket", text="label",
+            labels={"end": f"{label} (end year)", "pct_change": f"% change {start_year}→{end_year}"},
+            title=f"Leaders & Laggards — {region_title} • {label} • {start_year}→{end_year}"
+        )
+        fig.add_vline(x=x_med, line_dash="dot", line_color="#888")
+        fig.add_hline(y=y_med, line_dash="dot", line_color="#888")
+
+        hover_tmpl = (
+            "<b>%{customdata[0]}</b><br>"
+            f"{label} (end): %{{x:.2f}}<br>"
+            f"% change {start_year}→{end_year}: %{{y:.2f}}%<extra></extra>"
+        )
+        fig.update_traces(
+            marker_size=12,
+            textposition="top center",
+            hovertemplate=hover_tmpl,
+            customdata=np.stack([out["Country"].to_numpy()], axis=-1),
+        )
+        fig.update_layout(legend_title_text="Quadrant")
+
+        # 8) Sorted table (descending by pct_change) with Region included
+        table = (out[["Region", "Country", "start", "end", "pct_change", "bucket"]]
+                #.sort_values("pct_change", ascending=False)
+                .sort_values(["bucket","end"], ascending=[True, False])
+                .reset_index(drop=True))
+
+        return fig, table
+
+
+
+
 
 
     # endregion

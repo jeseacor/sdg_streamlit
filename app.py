@@ -91,19 +91,25 @@ def clear_insight(page_key: str, fig=None, *, df=None, tag: str | None = None) -
             store.pop(k, None)
 
 
-def linked_image_local(img_path: str, url: str, *, width: int|None=None, radius: int | str = 12, sidebar=False, shadow: bool = False):
+def linked_image_local(img_path: str, url: str, *, width: int | None = None,
+                       radius: int | str = 12, sidebar: bool = False, shadow: bool = False):
     data = Path(img_path).read_bytes()
-    b64  = b64encode(data).decode("utf-8")
+    b64 = b64encode(data).decode("utf-8")
     ext = (Path(img_path).suffix or ".png").lstrip(".")
-    wcss = f"width:{width}px;" if width else "width:100%;"
+
+    # inner box width; if a width is given we’ll center that box, otherwise it can grow to 100%
+    box_w = f"width:{width}px;" if width else "max-width:100%;"
     rcss = f"{int(radius)}px" if isinstance(radius, (int, float)) else str(radius)
     scss = "box-shadow:0 2px 12px rgba(0,0,0,.25);" if shadow else ""
+
     html = f"""
-    <a href="{url}" target="_blank" rel="noopener noreferrer" style="display:block; text-decoration:none;">
-      <div style="{wcss} border-radius:{rcss}; overflow:hidden; {scss} line-height:0;">
+    <div style="width:100%; display:flex; justify-content:center;">  <!-- flex wrapper centers content -->
+    <a href="{url}" target="_blank" rel="noopener noreferrer" style="text-decoration:none; display:block;">
+        <div style="{box_w} margin:0 auto; border-radius:{rcss}; overflow:hidden; {scss} line-height:0;">
         <img src="data:image/{ext};base64,{b64}" style="width:100%; height:auto; display:block; border:0;" />
-      </div>
+        </div>
     </a>
+    </div>
     """
     (st.sidebar if sidebar else st).markdown(html, unsafe_allow_html=True)
 
@@ -320,12 +326,13 @@ with st.sidebar:
     st.session_state.last_nav_page = page
 
 
-    linked_image_local("assets/sdg_logo_b.png", "https://sdgs.un.org/goals", width=220, sidebar=True)
     
-    st.divider()
     if st.button("🤖 Chatbot", key="chat_sidebar_btn", use_container_width=True):
         st.session_state.chat_open = True
         chat_dialog()    
+
+    #st.divider()
+    linked_image_local("assets/sdg_logo_b.png", "https://sdgs.un.org/goals", width=180, sidebar=True)
 
 
 # --- Floating Chat Button (bottom-right) ---
@@ -495,7 +502,7 @@ if page == "Ranking":
 
     sub = st.segmented_control(
         "",
-        ["Rankings", "Percent Change", "Bar Chart (Locale)", "Bar Chart (SDG)"], default="Rankings",
+        ["Rankings", "Percent Change", "Quadrant Scatter (Level vs Momentum)", "Bar Chart (Locale)", "Bar Chart (SDG)"], default="Rankings",
         key="ranking_view",
     )
 
@@ -565,6 +572,29 @@ if page == "Ranking":
             return_fig=True,
         )
         show_plot(fig=fig, page_key="pct_change_sdg")
+
+    elif sub == "Quadrant Scatter (Level vs Momentum)":
+        c1, c2, c3, c4, c5 = st.columns(5)
+        with c1:
+            y0, y1 = st.select_slider("Start → End", options=YEARS, value=(YEARS[0], YEARS[-1]))
+        with c2:
+            #value_col = st.selectbox("Goal/SDG or Group)", sorted(GOAL_COLS + SDG_COLS + GROUPS))
+            goal_opts = ["Overall Score", *GOAL_COLS, *GROUPS, *SDG_COLS]
+            sel = st.selectbox("Goal or Group", goal_opts, index=0, key="quad_goal_choice")
+            value_col = None if sel in ("", "Overall Score") else sel
+        with c3:
+            #value_col = st.selectbox("Goal/SDG or Group)", sorted(GOAL_COLS + SDG_COLS + GROUPS))
+            goal_opts = ["All Regions", *REGIONS]
+            sel = st.selectbox("Select Region", goal_opts, index=0, key="quad_rgn_choice")
+            value_reg = None if sel in ("", "All Regions") else sel            
+
+        fig_scat, tbl_scat = kit.leaders_laggards_scatter(
+            df_sdg=df_sdg, df_lookup=df_lookup,
+            start_year=int(y0), end_year=int(y1),
+            region=value_reg,
+            measure=value_col
+        )
+        show_plot(fig=fig_scat, page_key="leaders_laggards_scatter")
 
 
     elif sub == "Bar Chart (Locale)":
@@ -639,7 +669,7 @@ if page == "Ranking":
 
         except Exception as e:
             st.warning(f"Could not render: {e}")
-    
+
 
 elif page == "Trends & Timelines":
     st.markdown('<div class="section-title">Trends & Timelines</div>', unsafe_allow_html=True)
