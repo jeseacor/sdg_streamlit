@@ -690,16 +690,24 @@ if page == "Ranking":
 
         elif view_mode == "Goals":
             #st.subheader("plot_goal_ranking")
-            c1, c2, c3, c4, c5 = st.columns(5)
+            c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
             with c1:
                 year = st.selectbox("Year", YEARS, index=len(YEARS)-1, key="gr_year")
             with c2:
                 rank_by = st.selectbox("Rank by", ["goal", "sdg", "group"], index=0, key="gr_rankby")
             with c3:
-                group_filter = st.multiselect("Filter groups (optional)", GROUPS, key="gr_groups") if rank_by != "group" else []
+                group_filter = st.multiselect("Filter groups", GROUPS, key="gr_groups") if rank_by != "group" else []
             with c4:
-                h = st.slider("Figure height", 400, 1200, 600, step=50, key="gr_h")
+                entity_type = st.selectbox("Entity type", ["Region", "Country"], index=0)
             with c5:
+                entities = []
+                if entity_type == "Region":
+                    entities = st.multiselect("Pick regions", REGIONS)
+                elif entity_type == "Country":
+                    entities = st.multiselect("Pick countries", COUNTRIES)
+            with c6:
+                h = st.slider("Figure height", 400, 1200, 600, step=50, key="gr_h")
+            with c7:
                 ascending = st.checkbox("Ascending", value=True, key="gr_asc")
 
             try:
@@ -710,6 +718,8 @@ if page == "Ranking":
                     rank_by=rank_by,
                     group_filter=group_filter if group_filter else None,
                     ascending=ascending,
+                    geo_level=entity_type,
+                    geo_names=entities,
                     fig_height=h,
                     fig_width=1100,
                 )

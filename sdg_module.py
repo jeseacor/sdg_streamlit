@@ -734,39 +734,70 @@ class ProjectKit:
         df_lookup: pd.DataFrame,
         year: int,
         template: str = "plotly_dark",
-        rank_by: str = "goal", # "goal", "sdg", or "group"
+        rank_by: str = "goal",  # "goal", "sdg", or "group"
         group_filter=None,
-        goal_filter=None, 
+        goal_filter=None,
         ascending: bool = True,
         fig_height: int = 500,
-        fig_width: int = 900
+        fig_width: int = 900,
+        geo_level: str | None = None,          # "country" or "region" or None
+        geo_names: str | list[str] | None = None  # single name or list of names
     ):
+        # year slice
         df_year = df_sdg[df_sdg["Year"] == year].copy()
+        if df_year.empty:
+            raise ValueError(f"No rows for Year {year}")
 
+        # optional geo filter
+        scope_note = ""
+        if geo_level is None:
+            df_scope = df_year
+            scope_note = " • All geographies"
+        else:
+            lvl = str(geo_level).strip().lower()
+            col = "Country" if lvl.startswith("c") else "Region"
+            if col not in df_year.columns:
+                raise ValueError(f"Column '{col}' not found in df_sdg")
+
+            if geo_names is None or (isinstance(geo_names, (list, tuple, set)) and len(geo_names) == 0):
+                # select all rows for the chosen level
+                df_scope = df_year[df_year[col].notna()]
+                scope_note = f" • {col}s: all"
+            else:
+                names = [geo_names] if isinstance(geo_names, str) else list(geo_names)
+                names_lc = {str(n).lower() for n in names}
+                df_scope = df_year[df_year[col].astype(str).str.lower().isin(names_lc)]
+                if df_scope.empty:
+                    raise ValueError(f"No rows for {col} in {names}")
+                scope_note = f" • {col}: {', '.join(names)}"
+
+        df_year = df_scope
+
+        # choose value columns and base title
         if rank_by.lower() == "goal":
             value_cols = [c for c in df_year.columns if c.startswith("Goal_")]
             chart_title = f"Ranking of SDG Goals • Year {year}"
-
         elif rank_by.lower() == "sdg":
             value_cols = [c for c in df_year.columns if c.lower().startswith("sdg") and len(c) > 7]
             chart_title = f"Ranking of SDG Indicators • Year {year}"
-
         elif rank_by.lower() == "group":
             value_cols = [c for c in df_year.columns if c.startswith("Goal_")]
             chart_title = f"Ranking of SDG Groups • Year {year}"
-
         else:
             raise ValueError("rank_by must be 'goal', 'sdg', or 'group'")
 
         if not value_cols:
             raise ValueError("No matching columns found for the selected mode.")
 
+        # average across the selected geo scope
         means = df_year[value_cols].mean(numeric_only=True).reset_index()
         means.columns = ["code", "value"]
 
+        # attach metadata
         meta = df_lookup[["code", "description", "group", "sdg"]].copy()
         merged = means.merge(meta, on="code", how="left")
 
+        # optional filters
         if group_filter:
             groups = [group_filter] if isinstance(group_filter, str) else list(group_filter)
             groups = [g.lower() for g in groups]
@@ -780,6 +811,7 @@ class ProjectKit:
         if merged.empty:
             raise ValueError("No data left after filtering. Check your filters.")
 
+        # shape final output
         if rank_by.lower() == "group":
             out = (
                 merged.groupby("group", as_index=False)
@@ -789,14 +821,17 @@ class ProjectKit:
         else:
             if rank_by.lower() == "goal":
                 merged["y_label"] = merged["code"] + " (" + merged["group"].fillna("").str.capitalize() + ")"
-            else: 
+            else:
                 merged["y_label"] = merged.apply(
-                    lambda r: f"{r['code']}" + (f" (Goal {int(r['sdg'])})" if pd.notna(r['sdg']) else ""),
+                    lambda r: f"{r['code']}" + (f"  Goal {int(r['sdg'])}" if pd.notna(r['sdg']) else ""),
                     axis=1
                 )
             out = merged
 
         out = out.sort_values("value", ascending=ascending)
+
+        # title with scope note
+        chart_title = chart_title + scope_note
 
         fig = px.bar(
             out,
@@ -808,10 +843,7 @@ class ProjectKit:
             title=chart_title,
             custom_data=[c for c in ["code","description","group","sdg","goals_in_group"] if c in out.columns]
         )
-        fig.update_traces(
-            texttemplate="%{text:.2f}",
-            textposition="outside", marker_color="#4789C8"
-        )
+        fig.update_traces(texttemplate="%{text:.2f}", textposition="outside", marker_color="#4789C8")
         fig.update_layout(
             yaxis_title=rank_by.capitalize(),
             xaxis_title="Mean Score",
@@ -819,7 +851,6 @@ class ProjectKit:
             height=fig_height,
             width=fig_width
         )
-
         return fig
 
 
