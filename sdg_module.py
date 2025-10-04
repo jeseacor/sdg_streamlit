@@ -3143,7 +3143,11 @@ class ProjectKit:
         benchmark: str = "top_quartile",        # "top_quartile" or "median"
         show_gap_labels: bool = True,
         label_offset_frac: float = 0.018,
-        label_yshift: int = -8
+        label_yshift: int = -8,
+        line_color="#7393B3",
+        line_width=3,
+        plot_height=620,
+        plot_template="plotly_dark"
     ):
         # ---- get country row ----
         row = df_sdg[(df_sdg["Country"] == country) & (df_sdg["Year"] == year)]
@@ -3193,7 +3197,7 @@ class ProjectKit:
                 x=[r["country_score"], r["benchmark"]],
                 y=[r["goal_label"], r["goal_label"]],
                 mode="lines",
-                line=dict(color="rgba(50,50,50,0.45)", width=3),
+                line=dict(color=line_color, width=line_width),
                 hoverinfo="skip",
                 showlegend=False
             ))
@@ -3235,19 +3239,22 @@ class ProjectKit:
                     x=lbl_x, y=r["goal_label"], xref="x", yref="y",
                     text=txt, showarrow=False, xanchor="left", yshift=label_yshift,
                     bgcolor="rgba(255,255,255,0.85)", bordercolor="rgba(0,0,0,0.25)",
-                    borderwidth=1, font=dict(size=12), align="left"
+                    borderwidth=1, font=dict(size=12, color="black"), align="left"
                 )
 
         # title includes region/all-regions choice
-        title = (f"{country} {year} — Gap to {bench_label} ({pool_label}) by Goal (Dumbbell)"
+        title = (f"{country} {year} — Gap to {bench_label} ({pool_label}) by Goal"
                 f"<br><sup>Labels show gap in points and % of benchmark; ordered by largest shortfall.</sup>")
         fig.update_layout(
             title=dict(text=title, x=0.5, xanchor="center"),
             legend_title_text="",
             xaxis_title="Score (0–100)",
             margin=dict(t=100, r=40, b=40, l=120),
-            template="plotly_white"
+            template=plot_template,
+            height=plot_height
         )
+        #fig.update_xaxes(showgrid=False, zeroline=False)
+        #fig.update_yaxes(showgrid=False, zeroline=False)        
 
         return fig, out
 

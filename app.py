@@ -605,7 +605,7 @@ if page == "Ranking":
         st.dataframe(tbl_scat)
 
     elif sub == "Benchmark Gaps":
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
             years = sorted(YEARS, reverse=True)
             year = st.selectbox("Year", years, index=0, key="bench_year")
@@ -618,13 +618,18 @@ if page == "Ranking":
             bench = st.selectbox("Benchmark", ["top_quartile", "median"], index=0)
         with c4:
             use_region_benchmark = st.toggle("Benchmark within region", value=True)
+        with c5:
+            h = st.slider("Figure height", 200, 1200, 500, step=50, key="bench_h")
 
         fig_bench, tbl_bench = kit.plot_gap_dumbbell_sdg(
             df_sdg=df_sdg,
             year=year,
             country=country_val,
             benchmark=bench,
+            label_yshift=0,
             region_benchmark=use_region_benchmark,
+            plot_height=h,
+            line_color="#7393B3"
         )
         show_plot(fig=fig_bench, page_key="plot_gap_dumbbell_sdg")
 
@@ -676,7 +681,7 @@ if page == "Ranking":
                     year=year,
                     df_lookup=df_lookup,
                     fig_height=h,
-                    fig_width=1100,
+                    fig_width=1100
                 )
                 show_plot(fig=fig, page_key="plot_sdg_ranking")
 
