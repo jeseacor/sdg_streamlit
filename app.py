@@ -227,6 +227,7 @@ def load_data():
     kit = ProjectKit()
     df_sdg, df_lookup = kit.get_clean_data()
     df_lookup = df_lookup.drop_duplicates(subset=["code"]).reset_index(drop=True)
+
     return df_sdg, df_lookup
 
 @st.cache_resource(show_spinner=True)
@@ -527,7 +528,7 @@ if page == "Ranking":
         with c4:
             years_range = None
             y0, y1 = st.select_slider("Range for % Change", options=YEARS, value=(YEARS[0], YEARS[-1]))
-            years_range = (int(y0), int(y1))            
+            years_range = (int(y0), int(y1))          
 
         try:
             df_rank = kit.get_ranking_table(
@@ -1069,7 +1070,7 @@ elif page == "Correlations":
                 st.info("Pick exactly one Region/Country for 'across_years'.")
             else:
                 corr_df, fig = kit.corr_by_entity(
-                    df_sdg=df_sdg,
+                    df_sdg=df_sdg, 
                     df_lookup=df_lookup,
                     level=level,
                     entity_type=None if entity_type == "None" else entity_type,
@@ -1095,7 +1096,7 @@ elif page == "Correlations":
         try:
             fig = kit.grouped_corr_heatmaps(
                 df_sdg=df_sdg,
-                df_lookup=df_lookup,
+                df_lookup=df_lookup, 
                 year=year,
                 indicator_mode=indicator_mode,
                 n_cols=int(n_cols)

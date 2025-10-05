@@ -273,31 +273,23 @@ class ProjectKit:
         if "sdgi_s" in df_backdated_st.columns:
             df_backdated_st = df_backdated_st.drop(columns=["sdgi_s"])
 
-        df = df_sdr2025.copy()
-        df.replace(r'^\s*$', pd.NA, regex=True, inplace=True)
-        for i in range(1, 18):
-            gc = f"Goal_{i}_Score"    
-            gr = f"Goal_{i}_Score_reg" 
-            g_country = pd.to_numeric(df.get(gc), errors="coerce")
-            g_region  = pd.to_numeric(df.get(gr), errors="coerce")
-            df[f"Goal_{i}"] = g_country.combine_first(g_region)
+        #======== SDR 2025=============
 
-        goal_cols = [f"Goal_{i}" for i in range(1, 18)]
-        id_candidates = ["iso3", "ISO3", "iso", "Name", "Country", "Region", "indexreg_"]
-        id_cols = [c for c in id_candidates if c in df.columns]
+        df_sdr2025_st = df_sdr2025.copy()
+        df_sdr2025_st = df_sdr2025_st.rename(columns=lambda x: x.replace("Score_", "") if x.startswith("Score_") else x)
+        df_sdr2025_st = df_sdr2025_st[
+            ['iso3', 'Name', 'Region'] +
+            [
+                col for col in df_sdr2025_st.columns
+                if col.startswith('Goal_') and col.endswith('_Score') or col.startswith('sdg') or col.endswith('Score_reg')
+            ]
+        ]
+        df_sdr2025_st = df_sdr2025_st.rename(
+            columns=lambda c: re.sub(r'^(?!Score_reg_)(.+)_Score_reg$', r'Score_reg_\1', c)
+        )        
+        df_sdr2025_st = df_sdr2025_st.rename(columns=lambda x: x.replace("_Score", "") if x.startswith('Goal_') and x.endswith("_Score") else x)
 
-        score_sdg_cols = [c for c in df.columns if c.lower().startswith("score_sdg")]
-        sdg_cols       = [c for c in df.columns if c.lower().startswith("sdg")
-                        and not c.lower().startswith("score_sdg")]
-
-        cols = id_cols + goal_cols + score_sdg_cols + sdg_cols
-        seen = set()
-        cols = [c for c in cols if c in df.columns and not (c in seen or seen.add(c))]
-        df_sdr2025_st = df.loc[:, cols].copy()
-        df_sdr2025_st.rename(
-            columns=lambda c: c.replace("Score_", "", 1) if c.startswith("Score_sdg") else c,
-            inplace=True
-        )
+        #==============================
 
         df_backdated_st = df_backdated_st.rename(columns={"id": "ID", "year": "Year", "indexreg_": "Region"})
         df_sdr2025_st = df_sdr2025_st.rename(columns={"iso3": "ID", "Name": "Country"})
@@ -306,7 +298,7 @@ class ProjectKit:
         df_sdg = df_sdg.sort_values(by=["Country", "Year"]).reset_index(drop=True)
         num_cols = [col for col in df_sdg.columns if "sdg" in col or "Goal" in col]
         df_sdg[num_cols] = df_sdg[num_cols].apply(pd.to_numeric, errors="coerce")
-        df_sdg = df_sdg.round(0)
+        #df_sdg = df_sdg.round(0)
         region_map = {
             "E. Europe & C. Asia": "E_Euro_Asia",
             "Western Europe (non-OECD)": "W_Europe",
@@ -1071,30 +1063,73 @@ class ProjectKit:
 
         score_src_label = _score_label_from_goal(goal)
 
+        def _fallback_series(frame: pd.DataFrame, base_col: str) -> pd.Series:
+            """
+            Row-wise: use Goal_*; if NaN/blank, fall back to Score_reg_Goal_*,
+            then (for backward compatibility) Goal_*_Score_reg.
+            """
+            if base_col in frame.columns:
+                s = pd.to_numeric(frame[base_col], errors="coerce")
+            else:
+                s = pd.Series(np.nan, index=frame.index, dtype="float64")
+
+            # NEW name first
+            alt1 = f"Score_reg_{base_col}"      # e.g., Score_reg_Goal_7
+            if alt1 in frame.columns:
+                s = s.fillna(pd.to_numeric(frame[alt1], errors="coerce"))
+
+            return s
+
+
         # metric helper (Overall / Goal_# / group / explicit column)
         def _metric(frame: pd.DataFrame) -> pd.Series:
+            """
+            Compute metric for Overall / Goal_# / group / explicit column,
+            using fallbacks to Score_reg_Goal_* (and Goal_*_Score_reg).
+            """
+            # OVERALL = mean across Goal_1..Goal_17 (with fallback)
             if goal is None or str(goal).strip().lower() in {"overall", "overall score", "overall scores"}:
-                goal_cols = [c for c in frame.columns if c.startswith("Goal_")]
-                if not goal_cols:
-                    raise ValueError("No Goal_* columns found to compute Overall Score.")
-                return frame[goal_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
+                # collect bases even if only the fallback columns exist
+                bases = set()
+                for c in frame.columns:
+                    m = re.fullmatch(r"(Goal_\d+)$", c)
+                    if m: bases.add(m.group(1))
+                    m = re.fullmatch(r"(Goal_\d+)_Score_reg$", c)
+                    if m: bases.add(m.group(1))
+                    m = re.fullmatch(r"Score_reg_(Goal_\d+)$", c)
+                    if m: bases.add(m.group(1))
+                if not bases:
+                    raise ValueError("No Goal_* (or Score_reg_Goal_* / Goal_*_Score_reg) columns to compute Overall Score.")
+                goal_bases = sorted(bases, key=lambda x: int(x.split("_")[1]))
+                mat = pd.concat([_fallback_series(frame, b) for b in goal_bases], axis=1)
+                return mat.mean(axis=1, skipna=True)
+
             g = str(goal).strip()
             gl = g.lower()
+
+            # GROUP = average of that group's Goal_# codes (with fallback)
             if gl in group_names_lower:
                 if df_lookup is None or not {"group", "code"}.issubset(df_lookup.columns):
-                    raise ValueError("df_lookup with group and code columns is required when goal is a group name.")
+                    raise ValueError("df_lookup with 'group' and 'code' columns is required when goal is a group name.")
                 codes = (
                     df_lookup.loc[df_lookup["group"].astype(str).str.strip().str.lower() == gl, "code"]
                     .dropna().astype(str).tolist()
                 )
-                cols = [c for c in codes if c in frame.columns]
-                if not cols:
-                    raise ValueError(f"No df_sdg columns matched the {g} group.")
-                return frame[cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
-            else:
-                if g not in frame.columns:
-                    raise ValueError(f"Column not found: {g}")
-                return pd.to_numeric(frame[g], errors="coerce")
+                bases = [c for c in codes if re.fullmatch(r"Goal_\d+", c)]
+                if not bases:
+                    raise ValueError(f"No Goal_* codes found in df_lookup for group '{g}'.")
+                mat = pd.concat([_fallback_series(frame, b) for b in bases], axis=1)
+                return mat.mean(axis=1, skipna=True)
+
+            # SINGLE GOAL = Goal_# (with fallback)
+            if re.fullmatch(r"Goal_\d+", g):
+                return _fallback_series(frame, g)
+
+            # Any other explicit column: original behavior
+            if g not in frame.columns:
+                raise ValueError(f"Column not found: {g}")
+            return pd.to_numeric(frame[g], errors="coerce")
+
 
         # --- SCORE (original logic) ---
         score = _metric(d)
