@@ -3429,7 +3429,7 @@ class ProjectKit:
         }).sort_values("sdg")
         
         # 1) trim the right margin (it was 180)
-        fig.update_layout(margin=dict(l=10, r=50, t=50, b=50))
+        fig.update_layout(margin=dict(l=10, r=50, t=50, b=20))
         
         # 2) give the polar subplot more room (wider domain)
         fig.update_layout(polar=dict(domain=dict(x=[0.10, 0.95], y=[0.12, 0.92])))
