@@ -3290,6 +3290,150 @@ class ProjectKit:
         return fig, out
 
 
+    def plot_sdg_radial(
+        self,
+        df_sdg: pd.DataFrame,
+        df_lookup: pd.DataFrame,
+        year: int | None = 2025,                 # None = average across all years
+        region_names: str | list[str] | None = None,
+        country_names: str | list[str] | None = None,
+        aggregate: str = "mean",                 # "mean" or "median"
+        color_by_group: bool = True,
+        show_group_legend: bool = True,          # keep legend for group colors
+        template: str = "plotly_dark",
+        fig_width: int = 800,
+        fig_height: int = 800,
+    ):
+        # ---- slice rows
+        df = df_sdg.copy()
+        if year is not None and "Year" in df.columns:
+            df = df[df["Year"] == year].copy()
+        if region_names is not None and "Region" in df.columns:
+            regs = [region_names] if isinstance(region_names, str) else list(region_names)
+            df = df[df["Region"].astype(str).isin(regs)].copy()
+        if country_names is not None and "Country" in df.columns:
+            ctys = [country_names] if isinstance(country_names, str) else list(country_names)
+            df = df[df["Country"].astype(str).isin(ctys)].copy()
+        if df.empty:
+            raise ValueError("No rows left after filters. Check year, region, or country.")
+
+        # ---- goals & aggregation
+        goal_cols = [c for c in df.columns if c.startswith("Goal_")]
+        if not goal_cols:
+            raise ValueError("No Goal_ columns in df_sdg.")
+        vals = (df[goal_cols].median(numeric_only=True)
+                if aggregate.lower() == "median"
+                else df[goal_cols].mean(numeric_only=True)).astype(float)
+
+        def gnum(col: str) -> int:
+            try: return int(col.split("_")[1])
+            except Exception: return 999
+        vals = vals.sort_index(key=lambda idx: [gnum(c) for c in idx])
+        goal_cols = list(vals.index)
+
+        # ---- group colors
+        lu = df_lookup[["code", "group"]].drop_duplicates().set_index("code")
+        groups_raw = lu.reindex(goal_cols)["group"].fillna("Other")
+        groups_key = groups_raw.astype(str).str.lower()
+        sdg_labels = [f"SDG {gnum(c)}" for c in goal_cols]
+
+        palette = {
+            "economic": "#1f77b4",
+            "social": "#ff7f0e",
+            "environmental": "#2ca02c",
+            "partnership": "#9467bd",
+            "other": "#7f7f7f",
+        }
+        default_color = "#7f7f7f"
+
+        # ---- polar bars
+        n = len(vals)
+        theta = np.linspace(0, 360, n, endpoint=False)
+        width = 360.0 / n * 0.9
+        r_all = vals.values
+
+        fig = go.Figure()
+
+        if color_by_group and show_group_legend:
+            # split into one trace per group so Plotly shows a legend
+            order = ["economic", "social", "environmental", "partnership", "other"]
+            for k in [k for k in order if k in set(groups_key)]:
+                idx = np.where(groups_key.values == k)[0]
+                fig.add_trace(go.Barpolar(
+                    r=r_all[idx],
+                    theta=theta[idx],
+                    width=[width] * len(idx),
+                    marker_color=palette.get(k, default_color),
+                    marker_line_color="white",
+                    marker_line_width=1,
+                    name=k.title(),  # legend label
+                    hovertemplate=[f"{sdg_labels[i]}<br>{r_all[i]:.1f}" for i in idx],
+                    showlegend=True,
+                ))
+        else:
+            # single-trace, no legend
+            colors = [palette.get(k, default_color) for k in groups_key] if color_by_group else ["#2D6CDF"] * n
+            fig.add_trace(go.Barpolar(
+                r=r_all,
+                theta=theta,
+                width=[width] * n,
+                marker_color=colors,
+                marker_line_color="white",
+                marker_line_width=1,
+                hovertemplate=[f"{lab}<br>{v:.1f}" for lab, v in zip(sdg_labels, r_all)],
+                showlegend=False,
+            ))
+
+        # ---- title scope
+        parts = []
+        if year is not None: parts.append(f"Year {year}")
+        if region_names is None: parts.append("All regions")
+        else:
+            parts.append("Region " + (region_names if isinstance(region_names, str) else ", ".join(region_names)))
+            if country_names is None: parts.append("All countries")
+        if country_names is not None:
+            parts.append("Country " + (country_names if isinstance(country_names, str) else ", ".join(country_names)))
+
+        # ---- layout (legend on the RIGHT)
+        fig.update_layout(
+            template=template,
+            height=fig_height,
+            width=fig_width,
+            title="Average Performance by SDG" + (" • " + " • ".join(parts) if parts else ""),
+            margin=dict(l=110, r=180, t=110, b=110),           # a bit more room on the right for legend
+            polar=dict(
+                domain=dict(x=[0.14, 0.86], y=[0.16, 0.88]),
+                radialaxis=dict(range=[0, 100], tickvals=[25, 50, 75, 100], showline=False),
+                angularaxis=dict(
+                    tickmode="array",
+                    tickvals=theta,
+                    ticktext=sdg_labels,
+                    rotation=90,                # theta=0 at top
+                    direction="clockwise",
+                ),
+                bgcolor="rgba(0,0,0,0)",
+            ),
+            legend=dict(
+                orientation="v",                # vertical legend
+                x=1.02, xanchor="left",         # place to the right of the plot
+                y=1,  yanchor="top",       # vertically centered
+                bgcolor="rgba(0,0,0,0)"
+            ),
+        )
+
+        out = pd.DataFrame({
+            "code": goal_cols,
+            "sdg": [gnum(c) for c in goal_cols],
+            "value": r_all,
+            "group": list(groups_raw.astype(str).str.title()),
+        }).sort_values("sdg")
+        
+        # 1) trim the right margin (it was 180)
+        fig.update_layout(margin=dict(l=10, r=50, t=50, b=50))
+        
+        # 2) give the polar subplot more room (wider domain)
+        fig.update_layout(polar=dict(domain=dict(x=[0.10, 0.95], y=[0.12, 0.92])))
+        return fig, out
 
 
     # endregion
