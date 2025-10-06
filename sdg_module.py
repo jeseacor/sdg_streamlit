@@ -17,7 +17,7 @@ from scipy.spatial.distance import pdist, squareform
 from scipy.cluster.hierarchy import linkage
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import plotly.io as pio
 import os, base64
 
@@ -27,26 +27,6 @@ assert os.getenv("OPENAI_API_KEY"), "Missing OPENAI_API_KEY in your environment"
 
 from openai import OpenAI
 client = OpenAI()
-
-import random
-import matplotlib.colors as mcolors
-import plotly.express as px
-from bs4 import BeautifulSoup  
-from IPython.display import HTML
-from IPython.display import display
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import cross_val_score
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, make_scorer
-from sklearn.model_selection import cross_val_score
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import RandomizedSearchCV, cross_val_score
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
-from sklearn.impute import SimpleImputer
-from sklearn.neural_network import MLPRegressor
-from scipy.stats import uniform
-from sklearn.linear_model import Ridge
 
 class ProjectKit:
     def __init__(self, df=None):
@@ -3567,6 +3547,437 @@ class ProjectKit:
 
 
     # endregion
+
+
+
+    # region [SDG Forecasting]
+
+
+    # ---------- lookups ----------
+    def _goal_codes(self, df_lookup: pd.DataFrame):
+        """Return sorted ['Goal_1', ..., 'Goal_17'] found in df_lookup['code']."""
+        s = (df_lookup.get("code", pd.Series(dtype=str))
+            .dropna().astype(str))
+        s = s[s.str.match(r"^Goal_\d{1,2}$")]
+        codes = sorted(s.unique().tolist(), key=lambda c: int(c.split("_")[1]))
+        return codes
+
+    def _groups_map(self, df_lookup: pd.DataFrame):
+        """
+        Return dict: group_name(lowercase) -> sorted list of Goal_* codes.
+        Expects columns ['code','group'].
+        """
+        if "group" not in df_lookup or "code" not in df_lookup:
+            return {}
+        look = df_lookup.dropna(subset=["group", "code"]).copy()
+        look["code"] = look["code"].astype(str)
+        look["group"] = look["group"].astype(str).str.strip()
+        gmap = {}
+        for g, sub in look.groupby(look["group"].str.lower()):
+            codes = sub["code"].loc[sub["code"].str.match(r"^Goal_\d{1,2}$")].tolist()
+            if codes:
+                codes = sorted(codes, key=lambda c: int(c.split("_")[1]))
+                gmap[g] = codes
+        return gmap
+
+    def _country_region_lists(self, df_sdg: pd.DataFrame):
+        countries = sorted(df_sdg.get("Country", pd.Series(dtype=str)).dropna().unique().tolist())
+        regions   = sorted(df_sdg.get("Region",  pd.Series(dtype=str)).dropna().unique().tolist())
+        return countries, regions
+
+    # ---------- value access ----------
+    def _fallback_goal_value(self, row: pd.Series, base_code: str):
+        """
+        Get a goal value from a row with fallbacks:
+        Goal_k -> Score_reg_Goal_k -> Goal_k_Score_reg
+        """
+        v = pd.to_numeric(row.get(base_code), errors="coerce")
+        if pd.isna(v): v = pd.to_numeric(row.get(f"Score_reg_{base_code}"), errors="coerce")
+        if pd.isna(v): v = pd.to_numeric(row.get(f"{base_code}_Score_reg"), errors="coerce")
+        return v
+
+    def _safe_nanmean(self, seq):
+        """nanmean that returns np.nan for empty/all-nan sequences."""
+        arr = [x for x in seq if pd.notna(x)]
+        return np.nan if len(arr) == 0 else float(np.nanmean(arr))
+
+    # ---------- sdg argument normalization ----------
+    def _normalize_sdg_arg(self, sdg):
+        """
+        Accepts: 12, '12', 'Goal_12', 'sdg_12', ['Goal_3','sdg_6', 7]
+        Returns: ['Goal_3','Goal_6','Goal_7'] (sorted & de-duplicated)
+        """
+        if sdg is None:
+            return None
+        items = sdg if isinstance(sdg, (list, tuple, set, np.ndarray, pd.Series)) else [sdg]
+        out = []
+        for x in items:
+            if isinstance(x, (int, np.integer)):
+                n = int(x)
+            else:
+                s = str(x).strip().lower()
+                m = re.search(r"(\d{1,2})", s)
+                if not m:
+                    raise ValueError(f"Could not parse SDG from {x!r}; use 12, 'Goal_12', or 'sdg_12'.")
+                n = int(m.group(1))
+            if not (1 <= n <= 17):
+                raise ValueError(f"SDG number {n} out of range (1..17).")
+            out.append(f"Goal_{n}")
+        return sorted(set(out), key=lambda c: int(c.split("_")[1]))
+
+    def _forecast_one_series(self, y_yearly: pd.Series, h: int, last_hist_year: int) -> pd.DataFrame:
+        y = y_yearly.dropna().astype(float).sort_index()
+
+        # ---- fallback when too short or empty ----
+        if len(y) < 3 or h <= 0:
+            last = float(y.iloc[-1]) if len(y) else 50.0  # flat fallback level
+            start = last_hist_year + 1                    # <-- use global last hist year
+            years = np.arange(start, start + h)
+            yhat = np.repeat(last, h)
+            return pd.DataFrame({
+                "year": years, "yhat": yhat,
+                "lo80": yhat - 7.5, "hi80": yhat + 7.5,
+                "lo95": yhat - 12.0, "hi95": yhat + 12.0
+            })
+
+        # ---- normal ETS path ----
+        def logit01(v):
+            v = np.clip(v, 1e-6, 100 - 1e-6) / 100.0
+            return np.log(v / (1 - v))
+        def inv_logit01(z):
+            p = 1.0 / (1.0 + np.exp(-z))
+            return np.clip(p * 100.0, 0.0, 100.0)
+
+        z = logit01(y.values)
+
+        model = ExponentialSmoothing(z, trend="add", damped_trend=True, seasonal=None)
+        fit   = model.fit(optimized=True, use_brute=False)
+
+        # if y had points, use its max year; otherwise fall back to dataset’s last year
+        last_year = int(y.index.max()) if len(y) else int(last_hist_year)
+        years = np.arange(last_year + 1, last_year + 1 + h)
+
+        zf = np.asarray(fit.forecast(h))
+        resid = z - np.asarray(fit.fittedvalues)
+        sigma = float(np.nanstd(resid, ddof=1)) if len(resid) > 2 else 0.25
+        z_lo80, z_hi80 = zf - 1.28*sigma, zf + 1.28*sigma
+        z_lo95, z_hi95 = zf - 1.96*sigma, zf + 1.96*sigma
+
+        return pd.DataFrame({
+            "year": years,
+            "yhat": inv_logit01(zf),
+            "lo80": inv_logit01(z_lo80),
+            "hi80": inv_logit01(z_hi80),
+            "lo95": inv_logit01(z_lo95),
+            "hi95": inv_logit01(z_hi95),
+        })
+
+    # ---------- main entry (simplified API) ----------
+    def forecast_sdg_any(
+        self,
+        df_sdg: pd.DataFrame,
+        df_lookup: pd.DataFrame,
+        *,
+        sdg=None,                      # 12 | 'Goal_12' | 'sdg_12' | list[...] | None -> all goals
+        group=None,                    # 'environmental' | ['economic','social'] | None
+        overall: bool | None = None,   # True -> mean of all goals (ignores sdg)
+        entity_level: str = "region",  # 'country' or 'region'
+        entities=None,                 # if region: None -> all regions; if country: required
+        horizon_to: int = 2030,
+        agg_rule: str = "mean",        # placeholder for weighted means (future)
+    ) -> pd.DataFrame:
+        """
+        Returns a tidy DataFrame with columns:
+        ['geo_level','geo','target_level','target','year','yhat','lo80','hi80','lo95','hi95']
+        """
+
+        # ----- lookups -----
+        all_goals = self._goal_codes(df_lookup)             # Goal_1..Goal_17 found in lookup
+        group_map = self._groups_map(df_lookup)             # {'environmental': [...], ...}
+        _, regions = self._country_region_lists(df_sdg)
+
+        # ----- target selection (precedence: group > overall > sdg(s)) -----
+        if group is not None:
+            target_level = "group"
+            T = group if isinstance(group, (list, tuple)) else [group]
+            T = [str(t).lower() for t in T]
+            unknown = [t for t in T if t not in group_map]
+            if unknown:
+                raise ValueError(f"Unknown group(s): {unknown}. Available: {sorted(group_map.keys())}")
+
+        elif overall:
+            target_level = "overall"
+            T = ["overall"]  # mean of all goals
+
+        else:
+            target_level = "goal"
+            norm = self._normalize_sdg_arg(sdg)  # None → all goals
+            T = all_goals if norm is None else norm
+
+        # ----- geography selection -----
+        gl = entity_level.strip().lower()
+        if gl == "region":
+            G = regions if entities is None else (entities if isinstance(entities, (list, tuple)) else [entities])
+        elif gl == "country":
+            if entities is None:
+                raise ValueError("For entity_level='country', provide a country or list via entities=...")
+            G = entities if isinstance(entities, (list, tuple)) else [entities]
+        else:
+            raise ValueError("entity_level must be 'country' or 'region'")
+
+        # ----- builder for a (geo, target) history series -----
+        def hist_series(geo: str, tgt: str) -> pd.Series:
+            if gl == "country":
+                sub = df_sdg[df_sdg["Country"] == geo]
+                years = sorted(sub["Year"].dropna().unique().tolist())
+                rows = []
+                for y in years:
+                    frame = sub.loc[sub["Year"] == y]
+                    if frame.empty:
+                        rows.append((y, np.nan)); continue
+                    row = frame.iloc[0]  # 1 row per country-year
+                    if target_level == "goal":
+                        v = self._fallback_goal_value(row, tgt)
+                    elif target_level == "group":
+                        cols = group_map[tgt]
+                        v = self._safe_nanmean([self._fallback_goal_value(row, c) for c in cols])
+                    else:  # overall
+                        v = self._safe_nanmean([self._fallback_goal_value(row, c) for c in all_goals])
+                    rows.append((y, v))
+                return pd.Series({y: v for y, v in rows})
+
+            else:  # region
+                sub = df_sdg[df_sdg["Region"] == geo]
+                years = sorted(sub["Year"].dropna().unique().tolist())
+                vals_by_year = []
+                for y in years:
+                    frame = sub[sub["Year"] == y]
+                    if frame.empty:
+                        vals_by_year.append((y, np.nan)); continue
+                    per_cty = []
+                    for _, row in frame.iterrows():
+                        if target_level == "goal":
+                            per_cty.append(self._fallback_goal_value(row, tgt))
+                        elif target_level == "group":
+                            cols = group_map[tgt]
+                            per_cty.append(self._safe_nanmean([self._fallback_goal_value(row, c) for c in cols]))
+                        else:
+                            per_cty.append(self._safe_nanmean([self._fallback_goal_value(row, c) for c in all_goals]))
+                    vals_by_year.append((y, self._safe_nanmean(per_cty)))
+                return pd.Series({y: v for y, v in vals_by_year})
+
+        # ----- forecast loop -----
+        out = []
+        last_hist_year = int(df_sdg["Year"].max())
+        h = max(0, int(horizon_to) - last_hist_year)
+        if h <= 0:
+            raise ValueError("horizon_to must be greater than the last historical year in df_sdg.")
+
+        for geo in G:
+            for tgt in T:
+                s = hist_series(geo, tgt)
+                fc = self._forecast_one_series(s, h, last_hist_year=last_hist_year)
+                fc["geo_level"] = gl
+                fc["geo"] = geo
+                fc["target_level"] = target_level
+                fc["target"] = tgt if target_level != "group" else tgt.title()
+                out.append(fc)
+
+        res = (pd.concat(out, ignore_index=True)
+            .loc[:, ["geo_level","geo","target_level","target","year","yhat","lo80","hi80","lo95","hi95"]])
+        return res
+
+
+    def plot_forecast_from_results(
+        self,
+        fc_df: pd.DataFrame,
+        df_sdg: pd.DataFrame,
+        df_lookup: pd.DataFrame,
+        *,
+        geo: str | None = None,
+        target: str | None = None,
+        template: str = "plotly_white",
+        show_pi95: bool = True,
+        show_pi80: bool = True,
+        show_boundary: bool = True,
+        title: str | None = None,
+        y_padding: float = 0.03,
+        clip_to_bounds: bool = True,
+        connect_gap: bool = True,          # NEW: draw connector between history and forecast
+    ) -> go.Figure:
+        # -------- choose series ----------
+        pairs = fc_df[["geo_level", "geo", "target_level", "target"]].drop_duplicates()
+        if geo is None:
+            if pairs["geo"].nunique() != 1:
+                raise ValueError("Multiple geos in fc_df; pass geo='...'.")
+            geo = pairs["geo"].iloc[0]
+        if target is None:
+            subp = pairs[pairs["geo"] == geo]
+            if subp["target"].nunique() != 1:
+                raise ValueError("Multiple targets for this geo; pass target='...'.")
+            target = subp["target"].iloc[0]
+
+        fc_sel = fc_df[(fc_df["geo"] == geo) & (fc_df["target"] == target)].sort_values("year")
+        if fc_sel.empty:
+            raise ValueError("No forecast rows for the requested (geo, target).")
+
+        gl = fc_sel["geo_level"].iloc[0]
+        tl = fc_sel["target_level"].iloc[0]
+
+        # -------- build historical identical to your aggregation ----------
+        all_goals = self._goal_codes(df_lookup)
+        group_map = self._groups_map(df_lookup)
+
+        def _hist_country_series(country: str, tgt: str) -> pd.Series:
+            sub = df_sdg[df_sdg["Country"] == country]
+            years = sorted(sub["Year"].dropna().unique().tolist())
+            vals = []
+            for y in years:
+                frame = sub[sub["Year"] == y]
+                if frame.empty: vals.append((y, np.nan)); continue
+                row = frame.iloc[0]
+                if tl == "goal":
+                    v = self._fallback_goal_value(row, tgt)
+                elif tl == "group":
+                    cols = group_map[tgt.lower()]
+                    v = self._safe_nanmean([self._fallback_goal_value(row, c) for c in cols])
+                else:
+                    v = self._safe_nanmean([self._fallback_goal_value(row, c) for c in all_goals])
+                vals.append((y, v))
+            return pd.Series({y: v for y, v in vals})
+
+        def _hist_region_series(region: str, tgt: str) -> pd.Series:
+            sub = df_sdg[df_sdg["Region"] == region]
+            years = sorted(sub["Year"].dropna().unique().tolist())
+            vals = []
+            for y in years:
+                frame = sub[sub["Year"] == y]
+                if frame.empty: vals.append((y, np.nan)); continue
+                per_cty = []
+                for _, row in frame.iterrows():
+                    if tl == "goal":
+                        per_cty.append(self._fallback_goal_value(row, tgt))
+                    elif tl == "group":
+                        cols = group_map[tgt.lower()]
+                        per_cty.append(self._safe_nanmean([self._fallback_goal_value(row, c) for c in cols]))
+                    else:
+                        per_cty.append(self._safe_nanmean([self._fallback_goal_value(row, c) for c in all_goals]))
+                vals.append((y, self._safe_nanmean(per_cty)))
+            return pd.Series({y: v for y, v in vals})
+
+        if gl == "country":
+            hist = _hist_country_series(geo, target)
+        else:
+            hist = _hist_region_series(geo, target)
+
+        hist = hist.dropna().sort_index()
+        x_hist, y_hist = hist.index.to_list(), hist.values.tolist()
+
+        # -------- figure ----------
+        fig = go.Figure()
+
+        # Actuals
+        last_hist_year = None
+        last_hist_val  = None
+        if len(x_hist) > 0:
+            fig.add_trace(go.Scatter(x=x_hist, y=y_hist, mode="lines+markers",
+                                    name="Actual", line=dict(width=2), marker=dict(size=6)))
+            last_hist_year = int(max(x_hist))
+            last_hist_val  = float(y_hist[-1])
+
+        # Bands & forecast
+        x_fc = fc_sel["year"].astype(int)
+        if show_pi95:
+            fig.add_trace(go.Scatter(
+                x=pd.concat([x_fc, x_fc.iloc[::-1]]),
+                y=pd.concat([fc_sel["hi95"], fc_sel["lo95"].iloc[::-1]]),
+                fill="toself", fillcolor="rgba(0,0,0,0.12)", line=dict(width=0),
+                hoverinfo="skip", name="95% PI"
+            ))
+        if show_pi80:
+            fig.add_trace(go.Scatter(
+                x=pd.concat([x_fc, x_fc.iloc[::-1]]),
+                y=pd.concat([fc_sel["hi80"], fc_sel["lo80"].iloc[::-1]]),
+                fill="toself", fillcolor="rgba(0,0,0,0.20)", line=dict(width=0),
+                hoverinfo="skip", name="80% PI"
+            ))
+
+        # Forecast mean
+        fig.add_trace(go.Scatter(
+            x=fc_sel["year"], y=fc_sel["yhat"], mode="lines+markers",
+            name="Forecast", line=dict(width=2, dash="dash"), marker=dict(size=6)
+        ))
+
+        # NEW: connector from last actual to first forecast point
+        if connect_gap and last_hist_year is not None and len(fc_sel) > 0:
+            first_fc_year = int(fc_sel["year"].iloc[0])
+            first_fc_yhat = float(fc_sel["yhat"].iloc[0])
+            fig.add_trace(go.Scatter(
+                x=[last_hist_year, first_fc_year],
+                y=[last_hist_val, first_fc_yhat],
+                mode="lines",
+                line=dict(width=1.5, dash="dot", color="rgba(80,80,80,0.9)"),
+                showlegend=False, hoverinfo="skip"
+            ))
+
+        # Vertical boundary
+        if show_boundary and last_hist_year is not None:
+            fig.add_vline(x=last_hist_year, line_width=1, line_dash="dot", line_color="gray")
+
+        # -------- AUTO Y-RANGE from data (actuals + all forecast columns) ----------
+        vals = []
+        if y_hist: vals.extend(y_hist)
+        vals.extend(fc_sel[["yhat", "lo80", "hi80", "lo95", "hi95"]].to_numpy().ravel().tolist())
+        vals = [v for v in vals if pd.notna(v)]
+        if len(vals) == 0:
+            y0, y1 = 0.0, 100.0
+        else:
+            y_min = float(np.nanmin(vals))
+            y_max = float(np.nanmax(vals))
+            span = max(1e-6, y_max - y_min)
+            pad = max(0.5, y_padding * span)
+            y0, y1 = y_min - pad, y_max + pad
+            if clip_to_bounds:
+                y0, y1 = max(0.0, y0), min(100.0, y1)
+
+        # Title & axes
+        if tl == "goal":
+            tlabel = f"SDG {int(str(target).split('_')[-1])}"
+        elif tl == "group":
+            tlabel = str(target).title()
+        else:
+            tlabel = "Overall"
+
+        ttl = title or f"{tlabel} • {gl.title()}: {geo}"
+        # Set 5-year ticks aligned to the nearest multiple of 5
+        # Determine the min year across actuals + forecast
+        years_all = []
+        if len(x_hist) > 0: years_all.extend(x_hist)
+        years_all.extend(fc_sel["year"].tolist())
+        min_year = int(min(years_all))
+        tick0 = int(np.floor(min_year / 5) * 5)
+
+        fig.update_layout(
+            title=ttl,
+            template=template,
+            hovermode="x unified",
+            legend=dict(orientation="h", x=0, y=-0.15),
+            margin=dict(t=60, r=20, b=80, l=20)
+        )
+        fig.update_xaxes(title_text="Year", tickmode="linear", dtick=5, tick0=tick0)
+        fig.update_yaxes(title_text="Score (0–100)", range=[y0, y1])
+
+        return fig
+
+
+
+
+
+
+    # endregion
+
+
+
 
     # region [Composition and polish]
 

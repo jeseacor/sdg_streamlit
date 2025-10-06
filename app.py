@@ -759,7 +759,7 @@ elif page == "Trends & Timelines":
 
     sub = st.segmented_control(
         "",
-        ["Timeline (Locale)", "Timeline (SDG)"], default="Timeline (Locale)",
+        ["Timeline (Locale)", "Timeline (SDG)", "SDG Forecast"], default="Timeline (Locale)",
         key="timeline_view",
     )
 
@@ -849,6 +849,46 @@ elif page == "Trends & Timelines":
 
         except Exception as e:
             st.warning(f"Could not render: {e}")
+
+    elif sub == "SDG Forecast":
+        #st.subheader("plot_sdg_timeline")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            goal_opts = ["Overall Score", *GOAL_COLS, *SDG_COLS]
+            sel = st.selectbox("Goal", goal_opts, index=0, key="goal_choice")
+            goal = None if sel == "" else sel   # map blank to None
+        with c2:
+            entity_type = st.selectbox("Entity type", ["Region", "Country"], index=0)
+        with c3:
+            entities = REGIONS if entity_type == "Region" else COUNTRIES
+            if entity_type=="Region":
+                picked = st.selectbox("Region", entities) 
+            else:
+                picked = st.selectbox("Country", entities) 
+        with c4:
+            next_year = YEARS[-1] + 1 if YEARS else None   # handle empty list
+            to_year = st.number_input("Year Target", min_value=next_year, max_value=2050, value=2030, step=1)
+
+        if goal == "Overall Score":
+            isOverAll = True
+        else:
+            isOverAll = False
+
+        try: 
+            df_forecast = kit.forecast_sdg_any(
+                df_sdg=df_sdg,
+                df_lookup=df_lookup,
+                sdg=goal,
+                overall=isOverAll,
+                entity_level=entity_type,
+                entities=picked if picked else None,
+                horizon_to=to_year
+            )
+            fig = kit.plot_forecast_from_results(df_forecast, df_sdg, df_lookup)
+            show_plot(fig=fig, page_key="forecast_sdg_any")
+
+        except Exception as e:
+            st.warning(f"Could not render: {e}")            
 
 
 if page == "Network & Structure":
