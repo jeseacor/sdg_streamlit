@@ -273,7 +273,7 @@ st.session_state["GROUPS"] = GROUPS  # make available to all pages
 # -------------------- Sidebar Navigation --------------------
 PAGES = [
     "Home",
-    "Ranking",
+    "Performance Rankings",
     "Trends & Projections",
     "Network & Structure",
     "Correlations",
@@ -286,7 +286,7 @@ if "nav_page" not in st.session_state:
 
 with st.sidebar:
 
-    #here = Path(__file__).parent
+    #here = Path(__file__).parent 
     #logo_path = here / "sdg_logo_b.png" 
     #if logo_path.exists():
     #    st.image(str(logo_path), use_container_width=True)
@@ -498,7 +498,7 @@ if page == "Home":
     #st.stop()
 
 
-if page == "Ranking":
+if page == "Performance Rankings":
     st.markdown('<div class="section-title">Performance Rankings</div>', unsafe_allow_html=True)
 
     sub = st.segmented_control(
@@ -759,13 +759,13 @@ elif page == "Trends & Projections":
 
     sub = st.segmented_control(
         "",
-        ["Timeline (Locale)", "Timeline (SDG)", "SDG Forecast"], default="Timeline (Locale)",
+        ["Trend (Locale)", "Trend (SDG)", "SDG Forecast"], default="Trend (Locale)",
         key="timeline_view",
     )
 
     #tab_loc, tab_sdg  = st.tabs(["Timeline (Locale)", "Timeline (SDG)"])
     
-    if sub == "Timeline (Locale)":
+    if sub == "Trend (Locale)":
         #st.subheader("plot_goal_entity_timeline")
         c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
@@ -809,7 +809,7 @@ elif page == "Trends & Projections":
         except Exception as e:
             st.warning(f"Could not render: {e}")
 
-    elif sub == "Timeline (SDG)":
+    elif sub == "Trend (SDG)":
         #st.subheader("plot_sdg_timeline")
         c1, c2, c3, c4 = st.columns(4)
         with c1:
@@ -831,7 +831,7 @@ elif page == "Trends & Projections":
             elif mode == "sdg":
                 items = st.multiselect("Goal", SDG_COLS)       
         with c4:
-            h = st.slider("Figure height", 400, 1200, 600, step=50, key="pst_h")
+            h = st.slider("Figure height", 400, 1200, 600, step=50, key="pst_h")       
 
         try:
             fig = kit.plot_sdg_timeline(
@@ -874,6 +874,11 @@ elif page == "Trends & Projections":
         else:
             isOverAll = False
 
+        st.markdown(
+            f"<div class='meta'>Short term projection based on continuation of recent level. External shocks or policy changes are not modeled.</div>",
+            unsafe_allow_html=True
+        )                    
+
         try: 
             df_forecast = kit.forecast_sdg_any(
                 df_sdg=df_sdg,
@@ -888,7 +893,8 @@ elif page == "Trends & Projections":
             show_plot(fig=fig, page_key="forecast_sdg_any")
 
         except Exception as e:
-            st.warning(f"Could not render: {e}")            
+            st.warning(f"Could not render: {e}")       
+
 
 
 if page == "Network & Structure":

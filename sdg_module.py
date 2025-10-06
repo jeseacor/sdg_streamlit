@@ -3659,8 +3659,13 @@ class ProjectKit:
 
         z = logit01(y.values)
 
-        model = ExponentialSmoothing(z, trend="add", damped_trend=True, seasonal=None)
-        fit   = model.fit(optimized=True, use_brute=False)
+        #model = ExponentialSmoothing(z, trend="add", damped_trend=True, seasonal=None)
+        #fit   = model.fit(optimized=True, use_brute=False)
+        
+        fit = ExponentialSmoothing(
+            z, seasonal=None, trend=None, damped_trend=False,
+            initialization_method="estimated"
+        ).fit(optimized=True, use_brute=True, remove_bias=True)
 
         # if y had points, use its max year; otherwise fall back to dataset’s last year
         last_year = int(y.index.max()) if len(y) else int(last_hist_year)
