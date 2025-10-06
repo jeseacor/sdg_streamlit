@@ -17,9 +17,18 @@ from scipy.spatial.distance import pdist, squareform
 from scipy.cluster.hierarchy import linkage
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import plotly.io as pio
 import os, base64
+
+try:
+    from statsmodels.tsa.holtwinters import ExponentialSmoothing
+    _HAS_STATSMODELS = True
+except Exception as e:
+    _HAS_STATSMODELS = False
+    _STATSIMPORT_ERR = e
+
+
+
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -3690,6 +3699,10 @@ class ProjectKit:
         Returns a tidy DataFrame with columns:
         ['geo_level','geo','target_level','target','year','yhat','lo80','hi80','lo95','hi95']
         """
+
+        if not _HAS_STATSMODELS:
+            raise RuntimeError(f"statsmodels not available. Install it on the server. Original import error: {_STATSIMPORT_ERR}")
+
 
         # ----- lookups -----
         all_goals = self._goal_codes(df_lookup)             # Goal_1..Goal_17 found in lookup
