@@ -640,15 +640,19 @@ if page == "Performance Rankings":
         c1, c2, c3 = st.columns(3)
         with c1:
             years = sorted(YEARS, reverse=True)
-            year = st.selectbox("Year", years, index=0, key="pw_year")
+            year = st.selectbox("Year", years, index=0, key="pw_year") 
         with c2:
-            entity_type = st.selectbox("Entity type", ["All", "Region", "Country"], index=0)
+            entity_type = st.selectbox("Entity type", ["All", "Region", "Country"], index=2)
         with c3:
             entities = []
             if entity_type == "Region":
                 entities = st.selectbox("Pick regions", REGIONS, index=0)
             elif entity_type == "Country":
-                entities = st.selectbox("Pick countries", COUNTRIES, index=0)
+                #entities = st.selectbox("Pick countries", COUNTRIES, index=0)
+                options = sorted(df_sdg["Country"].dropna().unique().tolist())
+                default_idx = next((i for i, v in enumerate(options) if v == "New Zealand"), 0)
+                entities = st.selectbox("Country", options, index=default_idx, key="country_select")
+
 
         fig_radial, tab_radial = kit.plot_sdg_radial(
             df_sdg=df_sdg, df_lookup=df_lookup,
@@ -875,7 +879,7 @@ elif page == "Trends & Projections":
             isOverAll = False
 
         st.markdown(
-            f"<div class='meta'>Short term projection based on continuation of recent level. External shocks or policy changes are not modeled.</div>",
+            f"<div class='meta'>Short term ETS projection that extends the recent level with uncertainty bands; shocks or policy changes are not modeled.</div>",
             unsafe_allow_html=True
         )                    
 
