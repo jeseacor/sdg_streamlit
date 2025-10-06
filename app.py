@@ -274,7 +274,7 @@ st.session_state["GROUPS"] = GROUPS  # make available to all pages
 PAGES = [
     "Home",
     "Ranking",
-    "Trends & Timelines",
+    "Trends & Projections",
     "Network & Structure",
     "Correlations",
     "Settings",
