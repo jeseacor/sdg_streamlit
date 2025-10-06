@@ -862,13 +862,17 @@ elif page == "Trends & Projections":
             sel = st.selectbox("Goal", goal_opts, index=0, key="goal_choice")
             goal = None if sel == "" else sel   # map blank to None
         with c2:
-            entity_type = st.selectbox("Entity type", ["Region", "Country"], index=0)
+            entity_type = st.selectbox("Entity type", ["Region", "Country"], index=1)
         with c3:
             entities = REGIONS if entity_type == "Region" else COUNTRIES
             if entity_type=="Region":
                 picked = st.selectbox("Region", entities) 
             else:
-                picked = st.selectbox("Country", entities) 
+                #picked = st.selectbox("Country", entities) 
+                options = sorted(df_sdg["Country"].dropna().unique().tolist())
+                default_idx = next((i for i, v in enumerate(options) if v == "New Zealand"), 0)
+                picked = st.selectbox("Country", options, index=default_idx, key="country_select")
+
         with c4:
             next_year = YEARS[-1] + 1 if YEARS else None   # handle empty list
             to_year = st.number_input("Year Target", min_value=next_year, max_value=2050, value=2030, step=1)
