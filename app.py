@@ -754,8 +754,8 @@ if page == "Ranking":
                 st.warning(f"Could not render: {e}")
 
 
-elif page == "Trends & Timelines":
-    st.markdown('<div class="section-title">Trends & Timelines</div>', unsafe_allow_html=True)
+elif page == "Trends & Projections":
+    st.markdown('<div class="section-title">Trends & Projections</div>', unsafe_allow_html=True)
 
     sub = st.segmented_control(
         "",
