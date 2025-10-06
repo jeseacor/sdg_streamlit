@@ -655,13 +655,14 @@ if page == "Ranking":
             year = year,
             region_names=entities if entity_type == "Region" else None,
             country_names=entities if entity_type == "Country" else None,
-            fig_height=800
+            fig_height=800,
+            kpi_pad=1.030
         )
         show_plot(fig=fig_radial, page_key="plot_sdg_radial")
 
 
     elif sub == "Bar Chart":
-        #view_mode = st.selectbox("View Mode", ["Locale", "Goals"], index=0)
+        #view_mode = st.selectbox("View Mode", ["Locale", "Goals"], index=0) 
         view_mode = st.radio(
             "View mode",
             ["Locale", "Goals"],
@@ -1041,7 +1042,7 @@ elif page == "Correlations":
     #tab_cm, tab_gch, tab_gcc, tab_gcb, tab_cwt, tab_cgs = st.tabs(["Correlation Matrix", "Grouped Corr Heatmaps", "Group-Pair Code Corr", "Grouped Corr Barchart", "Correlate With Target", "Cross-Group Corr Summary"])
 
     if sub == "Correlation Matrix":
-        #st.subheader("Correlation Matrix") # corr_by_entity
+        #st.subheader("Correlation Matrix") # corr_by_entity 
 
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -1053,8 +1054,11 @@ elif page == "Correlations":
             else:
                 entities = []
         with c2:
-            mode = st.selectbox("Mode", ["within_year", "across_years"], index=0)
-            year = None
+            if entity_type=="Country" and entities:
+                mode = st.selectbox("Mode", ["within_year", "across_years"], index=1)    
+            else:
+                mode = st.selectbox("Mode", ["within_year", "across_years"], index=0)
+            year = None 
             years_range = None
             if mode == "within_year":
                 year = st.selectbox("Year", YEARS, index=len(YEARS)-1, key="cbe_year")
@@ -1065,7 +1069,7 @@ elif page == "Correlations":
             level = st.selectbox("Level", ["goal", "sdg"], index=0)
 
         try:
-            # across_years requires exactly one entity
+            # across_years requires exactly one entity      
             if mode == "across_years" and (entity_type == "None" or len(entities) != 1):
                 st.info("Pick exactly one Region/Country for 'across_years'.")
             else:
@@ -1086,7 +1090,7 @@ elif page == "Correlations":
             st.warning(f"Could not render: {e}")        
 
     elif sub == "Grouped Heatmaps":
-        #st.subheader("grouped_corr_heatmaps")
+        #st.subheader("grouped_corr_heatmaps")    
         c1, c2 = st.columns(2)
         with c1:
             year = st.selectbox("Year", YEARS, index=len(YEARS)-1, key="gh_year")

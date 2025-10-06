@@ -3329,30 +3329,36 @@ class ProjectKit:
         self,
         df_sdg: pd.DataFrame,
         df_lookup: pd.DataFrame,
-        year: int | None = 2025,                 # None = average across all years
+        year: int | None = 2025,
         region_names: str | list[str] | None = None,
         country_names: str | list[str] | None = None,
-        aggregate: str = "mean",                 # "mean" or "median"
+        aggregate: str = "mean",
         color_by_group: bool = True,
-        show_group_legend: bool = True,          # keep legend for group colors
+        show_group_legend: bool = True,
         template: str = "plotly_dark",
-        fig_width: int = 800,
-        fig_height: int = 800,
+        fig_width: int = 900,
+        fig_height: int = 780,
+        kpi_pad=1.030
     ):
-        # ---- slice rows
-        df = df_sdg.copy()
-        if year is not None and "Year" in df.columns:
-            df = df[df["Year"] == year].copy()
-        if region_names is not None and "Region" in df.columns:
+        is_dark = "dark" in str(template).lower()
+
+        # ---------- peers (year/region scope) ----------
+        peers = df_sdg.copy()
+        if year is not None and "Year" in peers.columns:
+            peers = peers[peers["Year"] == year].copy()
+        if region_names is not None and "Region" in peers.columns:
             regs = [region_names] if isinstance(region_names, str) else list(region_names)
-            df = df[df["Region"].astype(str).isin(regs)].copy()
+            peers = peers[peers["Region"].astype(str).isin(regs)].copy()
+
+        # ---------- plotting slice ----------
+        df = peers.copy()
         if country_names is not None and "Country" in df.columns:
             ctys = [country_names] if isinstance(country_names, str) else list(country_names)
             df = df[df["Country"].astype(str).isin(ctys)].copy()
         if df.empty:
             raise ValueError("No rows left after filters. Check year, region, or country.")
 
-        # ---- goals & aggregation
+        # ---------- goals & aggregation ----------
         goal_cols = [c for c in df.columns if c.startswith("Goal_")]
         if not goal_cols:
             raise ValueError("No Goal_ columns in df_sdg.")
@@ -3363,25 +3369,26 @@ class ProjectKit:
         def gnum(col: str) -> int:
             try: return int(col.split("_")[1])
             except Exception: return 999
+
         vals = vals.sort_index(key=lambda idx: [gnum(c) for c in idx])
         goal_cols = list(vals.index)
+        sdg_labels = [f"SDG {gnum(c)}" for c in goal_cols]
 
-        # ---- group colors
+        # ---------- group colors ----------
         lu = df_lookup[["code", "group"]].drop_duplicates().set_index("code")
         groups_raw = lu.reindex(goal_cols)["group"].fillna("Other")
         groups_key = groups_raw.astype(str).str.lower()
-        sdg_labels = [f"SDG {gnum(c)}" for c in goal_cols]
 
         palette = {
-            "economic": "#1f77b4",
-            "social": "#ff7f0e",
-            "environmental": "#2ca02c",
+            "economic": "#4789C8",
+            "social": "#e4a024",
+            "environmental": "#00A305",
             "partnership": "#9467bd",
             "other": "#7f7f7f",
         }
         default_color = "#7f7f7f"
 
-        # ---- polar bars
+        # ---------- radial bars ----------
         n = len(vals)
         theta = np.linspace(0, 360, n, endpoint=False)
         width = 360.0 / n * 0.9
@@ -3390,7 +3397,6 @@ class ProjectKit:
         fig = go.Figure()
 
         if color_by_group and show_group_legend:
-            # split into one trace per group so Plotly shows a legend
             order = ["economic", "social", "environmental", "partnership", "other"]
             for k in [k for k in order if k in set(groups_key)]:
                 idx = np.where(groups_key.values == k)[0]
@@ -3401,12 +3407,11 @@ class ProjectKit:
                     marker_color=palette.get(k, default_color),
                     marker_line_color="white",
                     marker_line_width=1,
-                    name=k.title(),  # legend label
+                    name=k.title(),
                     hovertemplate=[f"{sdg_labels[i]}<br>{r_all[i]:.1f}" for i in idx],
-                    showlegend=True,
+                    showlegend=True
                 ))
         else:
-            # single-trace, no legend
             colors = [palette.get(k, default_color) for k in groups_key] if color_by_group else ["#2D6CDF"] * n
             fig.add_trace(go.Barpolar(
                 r=r_all,
@@ -3416,10 +3421,108 @@ class ProjectKit:
                 marker_line_color="white",
                 marker_line_width=1,
                 hovertemplate=[f"{lab}<br>{v:.1f}" for lab, v in zip(sdg_labels, r_all)],
-                showlegend=False,
+                showlegend=False
             ))
 
-        # ---- title scope
+        # value labels (overlay text)
+        labels = [f"{v:.2f}" if v >= 8 else "" for v in r_all]
+        r_text = [max(v * 0.82, 6) for v in r_all]
+        fig.add_trace(go.Scatterpolar(
+            r=r_text, theta=theta, mode="text", text=labels,
+            textposition="middle center",
+            textfont=dict(size=11, color=("white" if is_dark else "#111")),
+            hoverinfo="skip", showlegend=False
+        ))
+
+        # ---------- layout domains ----------
+        # default (no KPI row): radial uses almost full height
+        polar_domain_x = [0.05, 0.995]
+        polar_y = [0.08, 0.94]
+
+        # ---------- KPI row UNDER TITLE — bigger donut, higher labels, darker value text ----------
+        show_kpi = bool(country_names) and (len([country_names] if isinstance(country_names, str) else country_names) > 0)
+        if show_kpi:
+            # reserve a thin top band and let polar fill full width below
+            top_band = [0.845, 0.980]         # a touch taller than before so donut can grow
+            polar_y  = [0.08, 0.835]          # radial plot below KPI strip
+        
+            cname = country_names if isinstance(country_names, str) else country_names[0]
+            row = peers.loc[peers["Country"] == cname]
+        
+            def fallback_value(series, base):
+                v = pd.to_numeric(series.get(base), errors="coerce")
+                if pd.isna(v): v = pd.to_numeric(series.get(f"Score_reg_{base}"), errors="coerce")
+                if pd.isna(v): v = pd.to_numeric(series.get(f"{base}_Score_reg"), errors="coerce")
+                return v
+            base_goals = [c for c in peers.columns if re.fullmatch(r"Goal_\d+", c)]
+        
+            if year == 2025 and "Overall_Score" in peers.columns and not row.empty:
+                score = float(pd.to_numeric(row.iloc[0]["Overall_Score"], errors="coerce"))
+            else:
+                score = float(np.nanmean([fallback_value(row.iloc[0], b) for b in base_goals]))
+            score = float(np.clip(score, 0, 100))
+        
+            def overall_for_row(r):
+                if year == 2025 and "Overall_Score" in peers.columns:
+                    return pd.to_numeric(r["Overall_Score"], errors="coerce")
+                return np.nanmean([fallback_value(r, b) for b in base_goals])
+        
+            peers["__overall"] = peers.apply(overall_for_row, axis=1)
+            denom = int(peers["Country"].nunique())
+            tmp = peers.dropna(subset=["__overall"]).sort_values("__overall", ascending=False)
+            tmp["__rank"] = range(1, len(tmp) + 1)
+            rank = int(tmp.loc[tmp["Country"] == cname, "__rank"].iloc[0]) if cname in tmp["Country"].values else None
+        
+            # ---- layout of KPI row (center-left donut, rank to its right) ----
+            donut_x0, donut_x1 = 0.05, 0.16       # wider → bigger donut
+            donut_y0, donut_y1 = top_band[0], top_band[1]
+            cx, cy = (donut_x0 + donut_x1)/2, (donut_y0 + donut_y1)/2
+
+            ROW_SHIFT = -0.006                 # negative = down a bit; positive = up
+            donut_y0 += ROW_SHIFT
+            donut_y1 += ROW_SHIFT
+            cy = (donut_y0 + donut_y1) / 2 
+
+            hole_size = 0.72                      # slightly thicker ring (0.70–0.76 is fine)
+        
+            # keep values at the exact center of their blocks
+            LABEL_PAD = 0.100                 # ↑ move the label bars farther above
+            ylab     = min(donut_y1 + LABEL_PAD, kpi_pad)
+
+            score_y  = cy                     # value stays centered in the donut
+            rank_y   = cy                     # rank value stays centered in its row
+        
+            # contrast-aware value color (dark on white, white on dark)
+            value_color = "#4789C8"
+        
+            # --- Donut ---
+            fig.add_trace(go.Pie(
+                values=[score, 100 - score], labels=["Score", ""], hole=hole_size,
+                marker=dict(colors=["#2A56B6", "#E6E8F2"] if is_dark else ["#29499C", "#E6E8F2"]),
+                textinfo="none", hoverinfo="skip", sort=False, direction="clockwise",
+                showlegend=False, domain=dict(x=[donut_x0, donut_x1], y=[donut_y0, donut_y1])
+            ))
+            fig.add_annotation(x=cx, y=ylab, text="Country Score",
+                            showarrow=False, xanchor="center",
+                            font=dict(size=13, color="white"),
+                            bgcolor="#29499C", borderpad=6)
+            # value centered inside donut
+            fig.add_annotation(x=cx, y=score_y, text=f"{score:.1f}",
+                            showarrow=False, xanchor="center", yanchor="middle",
+                            font=dict(size=32, color=value_color))
+        
+            # --- Country Rank (to the right) ---
+            rx = donut_x1 + 0.035                  # a bit more gap from the larger donut
+            fig.add_annotation(x=rx, y=ylab, text="Country Rank",
+                            showarrow=False, font=dict(size=13, color="white"),
+                            bgcolor="#29499C", borderpad=6, xanchor="left")
+            rank_txt = "NA" if rank is None else f"<b style='font-size:46px'>{rank}</b> / {denom}"
+            fig.add_annotation(x=rx, y=rank_y, text=rank_txt,
+                            showarrow=False, xanchor="left", yanchor="middle",
+                            font=dict(size=24, color=value_color))
+
+
+        # ---------- title text ----------
         parts = []
         if year is not None: parts.append(f"Year {year}")
         if region_names is None: parts.append("All regions")
@@ -3429,29 +3532,26 @@ class ProjectKit:
         if country_names is not None:
             parts.append("Country " + (country_names if isinstance(country_names, str) else ", ".join(country_names)))
 
-        # ---- layout (legend on the RIGHT)
+        # ---------- layout ----------
         fig.update_layout(
             template=template,
             height=fig_height,
             width=fig_width,
-            title="Average Performance by SDG" + (" • " + " • ".join(parts) if parts else ""),
-            margin=dict(l=110, r=180, t=110, b=110),           # a bit more room on the right for legend
+            title="SDG Performance Profile" + (" • " + " • ".join(parts) if parts else ""),
+            margin=dict(l=10, r=10, t=78, b=56),
             polar=dict(
-                domain=dict(x=[0.14, 0.86], y=[0.16, 0.88]),
+                domain=dict(x=polar_domain_x, y=polar_y),
                 radialaxis=dict(range=[0, 100], tickvals=[25, 50, 75, 100], showline=False),
                 angularaxis=dict(
-                    tickmode="array",
-                    tickvals=theta,
-                    ticktext=sdg_labels,
-                    rotation=90,                # theta=0 at top
-                    direction="clockwise",
+                    tickmode="array", tickvals=theta, ticktext=sdg_labels,
+                    rotation=90, direction="clockwise",
                 ),
                 bgcolor="rgba(0,0,0,0)",
             ),
             legend=dict(
-                orientation="v",                # vertical legend
-                x=1.02, xanchor="left",         # place to the right of the plot
-                y=1,  yanchor="top",       # vertically centered
+                orientation="h",
+                x=0.5, xanchor="center",
+                y=-0.015, yanchor="top",
                 bgcolor="rgba(0,0,0,0)"
             ),
         )
@@ -3462,12 +3562,7 @@ class ProjectKit:
             "value": r_all,
             "group": list(groups_raw.astype(str).str.title()),
         }).sort_values("sdg")
-        
-        # 1) trim the right margin (it was 180)
-        fig.update_layout(margin=dict(l=10, r=50, t=50, b=20))
-        
-        # 2) give the polar subplot more room (wider domain)
-        fig.update_layout(polar=dict(domain=dict(x=[0.10, 0.95], y=[0.12, 0.92])))
+
         return fig, out
 
 
