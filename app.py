@@ -858,7 +858,7 @@ elif page == "Trends & Projections":
         #st.subheader("plot_sdg_timeline")
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            goal_opts = ["Overall Score", *GOAL_COLS, *SDG_COLS]
+            goal_opts = ["Overall Score", *GOAL_COLS]
             sel = st.selectbox("Goal", goal_opts, index=0, key="goal_choice")
             goal = None if sel == "" else sel   # map blank to None
         with c2:
