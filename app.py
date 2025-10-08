@@ -855,20 +855,20 @@ elif page == "Trends & Projections":
             st.warning(f"Could not render: {e}")
 
     elif sub == "SDG Forecast":
-        #st.subheader("plot_sdg_timeline")
+        #st.subheader("plot_sdg_timeline") 
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             goal_opts = ["Overall Score", *GOAL_COLS]
             sel = st.selectbox("Goal", goal_opts, index=0, key="goal_choice")
-            goal = None if sel == "" else sel   # map blank to None
+            goal = None if sel == "" else sel   # map blank to None 
         with c2:
             entity_type = st.selectbox("Entity type", ["Region", "Country"], index=1)
         with c3:
             entities = REGIONS if entity_type == "Region" else COUNTRIES
             if entity_type=="Region":
-                picked = st.selectbox("Region", entities) 
+                picked = st.selectbox("Region", entities, index=0) 
             else:
-                #picked = st.selectbox("Country", entities) 
+                #picked = st.selectbox("Country", entities)  
                 options = sorted(df_sdg["Country"].dropna().unique().tolist())
                 default_idx = next((i for i, v in enumerate(options) if v == "New Zealand"), 0)
                 picked = st.selectbox("Country", options, index=default_idx, key="country_select")
@@ -894,9 +894,10 @@ elif page == "Trends & Projections":
                 sdg=goal,
                 overall=isOverAll,
                 entity_level=entity_type,
-                entities=picked if picked else None,
+                entities=picked if picked is not None else None,
                 horizon_to=to_year
             )
+
             fig = kit.plot_forecast_from_results(df_forecast, df_sdg, df_lookup)
             show_plot(fig=fig, page_key="forecast_sdg_any")
 
@@ -916,7 +917,7 @@ if page == "Network & Structure":
     #tab_net, tab_pca, tab_den, tab_chd = st.tabs(["Network Graph", "PCA / Biplot", "Dendrogram", "Chord Diagram"])
 
     if sub == "Network Graph":
-        #st.subheader("plot_sdg_network")
+        #st.subheader("plot_sdg_network")  
         c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
             level = st.selectbox("Level", ["goal", "sdg"], index=0, key="net_level")
@@ -1096,7 +1097,7 @@ elif page == "Correlations":
     #tab_cm, tab_gch, tab_gcc, tab_gcb, tab_cwt, tab_cgs = st.tabs(["Correlation Matrix", "Grouped Corr Heatmaps", "Group-Pair Code Corr", "Grouped Corr Barchart", "Correlate With Target", "Cross-Group Corr Summary"])
 
     if sub == "Correlation Matrix":
-        #st.subheader("Correlation Matrix") # corr_by_entity 
+        #st.subheader("Correlation Matrix") # corr_by_entity  
 
         c1, c2, c3 = st.columns(3)
         with c1:

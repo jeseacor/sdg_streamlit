@@ -17,18 +17,9 @@ from scipy.spatial.distance import pdist, squareform
 from scipy.cluster.hierarchy import linkage
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import plotly.io as pio
 import os, base64
-
-try:
-    from statsmodels.tsa.holtwinters import ExponentialSmoothing
-    _HAS_STATSMODELS = True
-except Exception as e:
-    _HAS_STATSMODELS = False
-    _STATSIMPORT_ERR = e
-
-
-
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -3659,13 +3650,8 @@ class ProjectKit:
 
         z = logit01(y.values)
 
-        #model = ExponentialSmoothing(z, trend="add", damped_trend=True, seasonal=None)
-        #fit   = model.fit(optimized=True, use_brute=False)
-        
-        fit = ExponentialSmoothing(
-            z, seasonal=None, trend=None, damped_trend=False,
-            initialization_method="estimated"
-        ).fit(optimized=True, use_brute=True, remove_bias=True)
+        model = ExponentialSmoothing(z, trend="add", damped_trend=True, seasonal=None)
+        fit   = model.fit(optimized=True, use_brute=False)
 
         # if y had points, use its max year; otherwise fall back to dataset’s last year
         last_year = int(y.index.max()) if len(y) else int(last_hist_year)
@@ -3704,10 +3690,6 @@ class ProjectKit:
         Returns a tidy DataFrame with columns:
         ['geo_level','geo','target_level','target','year','yhat','lo80','hi80','lo95','hi95']
         """
-
-        if not _HAS_STATSMODELS:
-            raise RuntimeError(f"statsmodels not available. Install it on the server. Original import error: {_STATSIMPORT_ERR}")
-
 
         # ----- lookups -----
         all_goals = self._goal_codes(df_lookup)             # Goal_1..Goal_17 found in lookup
