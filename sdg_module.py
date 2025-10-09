@@ -3585,7 +3585,7 @@ class ProjectKit:
         regions   = sorted(df_sdg.get("Region",  pd.Series(dtype=str)).dropna().unique().tolist())
         return countries, regions
 
-    # ---------- value access ----------
+    # ---------- value access ---------- 
     def _fallback_goal_value(self, row: pd.Series, base_code: str):
         """
         Get a goal value from a row with fallbacks:
