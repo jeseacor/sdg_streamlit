@@ -21,12 +21,15 @@ from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import plotly.io as pio
 import os, base64
 
-from dotenv import load_dotenv
-load_dotenv()
-assert os.getenv("OPENAI_API_KEY"), "Missing OPENAI_API_KEY in your environment"
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    assert os.getenv("OPENAI_API_KEY"), "Missing OPENAI_API_KEY in your environment"
 
-from openai import OpenAI
-client = OpenAI()
+    from openai import OpenAI
+    client = OpenAI()
+except Exception:
+    pass
 
 class ProjectKit:
     def __init__(self, df=None):
@@ -3797,7 +3800,7 @@ class ProjectKit:
         *,
         geo: str | None = None,
         target: str | None = None,
-        template: str = "plotly_white",
+        template: str = "plotly_dark",
         show_pi95: bool = True,
         show_pi80: bool = True,
         show_boundary: bool = True,
