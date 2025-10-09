@@ -211,7 +211,7 @@ class ProjectKit:
 
         return pd.DataFrame(all_records)
 
-    # the big prep step: downloads codebook + SDR datasets, builds a unified 
+    # prep step: downloads codebook + SDR datasets, builds a unified 
     # df_lookup (codes/goals/descriptions/groups) and a cleaned SDG timeseries table (df_sdg) with friendly column names. Returns (df_sdg, df_lookup).
     def get_clean_data(self):
         df_goals = self.get_sdg_goals_grouped(class_code=2)
