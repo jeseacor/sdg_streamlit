@@ -1746,7 +1746,8 @@ class ProjectKit:
         measure: str | None = None,         # None/"Overall Score", or "Goal_#", or group name
         label_top: int = 5,
         fig_height: int = 520,
-        fig_width: int | None = None
+        fig_width: int | None = None,
+        plot_template="plotly_dark"
     ):
         d = df_sdg.copy()
 
@@ -1825,7 +1826,7 @@ class ProjectKit:
             labels={"end": f"{label} (end year)", "pct_change": f"% change {start_year}→{end_year}"},
         )
         fig.update_traces(textposition="top center", marker_size=10, cliponaxis=False)
-        fig.update_layout(hovermode="closest", hoverlabel=dict(namelength=-1), legend_title_text="Quadrant")
+        fig.update_layout(hovermode="closest", hoverlabel=dict(namelength=-1), legend_title_text="Quadrant", template=plot_template)
 
         fig.add_vline(x=x_med, line_dash="dot", line_color="#888")
         fig.add_hline(y=y_med, line_dash="dot", line_color="#888")
