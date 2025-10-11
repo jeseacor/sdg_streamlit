@@ -825,7 +825,7 @@ elif page == "Trends & Projections":
             st.warning(f"Could not render: {e}")
 
     elif sub == "Trend (SDG)":
-        #st.subheader("plot_sdg_timeline")
+        #st.subheader("plot_sdg_timeline")  
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             mode = st.selectbox("Mode", ["goal", "sdg"], index=0)
@@ -839,14 +839,16 @@ elif page == "Trends & Projections":
                 entities = st.multiselect("Countries", COUNTRIES)
         with c3:
             #pool_codes = GOAL_COLS if (mode in ["auto", "goal"]) else SDG_COLS
-            #items = st.multiselect("Items (codes or group names)", sorted(pool_codes + [g for g in GROUPS]))
+            #items = st.multiselect("Items (codes or group names)", sorted(pool_codes + [g for g in GROUPS])) 
             y0, y1 = st.select_slider("Start → End", options=YEARS, value=(YEARS[0], YEARS[-1]))
             if mode == "goal":
                 items = st.multiselect("Goal", GOAL_COLS)
             elif mode == "sdg":
                 items = st.multiselect("Goal", SDG_COLS)       
         with c4:
-            h = st.slider("Figure height", 400, 1200, 600, step=50, key="pst_h")       
+            h = st.slider("Figure height", 400, 1200, 600, step=50, key="pst_h")   
+            as_3d = st.checkbox("3D mode", value=False)    
+
 
         try:
             fig = kit.plot_sdg_timeline(
@@ -858,7 +860,8 @@ elif page == "Trends & Projections":
                 start_year=int(y0), end_year=int(y1),
                 group_filter=grp_filter if grp_filter else None,
                 entity_type=None if entity_type == "None" else entity_type,
-                entities=entities if entities else None
+                entities=entities if entities else None,
+                as_3d=as_3d
             )
             show_plot(fig=fig, page_key="plot_sdg_timeline")
 
@@ -867,7 +870,7 @@ elif page == "Trends & Projections":
 
     elif sub == "SDG Forecast":
         #st.subheader("plot_sdg_timeline") 
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
             goal_opts = ["Overall Score", *GOAL_COLS]
             sel = st.selectbox("Goal", goal_opts, index=0, key="goal_choice")
@@ -883,10 +886,13 @@ elif page == "Trends & Projections":
                 options = sorted(df_sdg["Country"].dropna().unique().tolist())
                 default_idx = next((i for i, v in enumerate(options) if v == "New Zealand"), 0)
                 picked = st.selectbox("Country", options, index=default_idx, key="country_select")
-
         with c4:
             next_year = YEARS[-1] + 1 if YEARS else None   # handle empty list
             to_year = st.number_input("Year Target", min_value=next_year, max_value=2050, value=2030, step=1)
+        with c5:
+            h = st.slider("Figure height", 400, 1200, 600, step=50, key="gr_h")
+
+        as_3d = st.toggle("3D forecast (ribbon)", value=False)
 
         if goal == "Overall Score":
             isOverAll = True
@@ -909,7 +915,7 @@ elif page == "Trends & Projections":
                 horizon_to=to_year
             )
 
-            fig = kit.plot_forecast_from_results(df_forecast, df_sdg, df_lookup)
+            fig = kit.plot_forecast_from_results(df_forecast, df_sdg, df_lookup, fig_height=h, as_3d=as_3d)
             show_plot(fig=fig, page_key="forecast_sdg_any")
 
         except Exception as e:
@@ -1380,14 +1386,14 @@ elif page == "About":
         <p>
             <b>GoalScope SDG Analytics Hub</b><br><br>
             University: <b>Massey University, New Zealand</b><br>
-            Paper: <b>158888 — Information Technology Professional Project</b><br><br>
-            Group Members : <b>Jesus Eric Seacor, Sai Ram Ceka</b><br>
+            Course: <b>158888 — Information Technology Professional Project</b><br><br>
+            Student : <b>Jesus Eric Seacor [24007226]</b><br>
             Teaching Team : <b>Dr. Anuradha Mathrani, Dr. Niloofar Aflaki</b><br><br>
-            <i>App created by Jesus Eric Seacor; analysis and project work in collaboration with Sai Ram Ceka.</i>
         </p>
     </div>
     """, unsafe_allow_html=True)    
 
+    #<i>App created by Jesus Eric Seacor; analysis and project work in collaboration with Sai Ram Ceka.</i>
 
     st.caption("""
     AI Use Statement : 

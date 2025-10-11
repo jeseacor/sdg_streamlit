@@ -1205,6 +1205,9 @@ class ProjectKit:
         title_prefix: str = "SDG timeline",
         start_year: int | None = None,
         end_year: int | None = None,
+        as_3d: bool = False,
+        show_point_labels_3d: bool = False,
+        marker_size_3d: int = 3,
     ):
         import plotly.express as px
 
@@ -1304,25 +1307,77 @@ class ProjectKit:
             f"<br><sup>{window_txt} • Showing: {sel_txt}</sup>"
         )
 
-        fig = px.line(
-            df_plot, x="Year", y="value", color="label", markers=True,
-            template=template, title=title,
-            hover_data={"code": True, "group": True, "description": True, "value": ":.2f"},
-        )
-
-        fig.update_traces(
-            hovertemplate=(
+        if not as_3d:
+            # ----- 2D (existing behavior) -----
+            fig = px.line(
+                df_plot, x="Year", y="value", color="label", markers=True,
+                template=template, title=title,
+                hover_data={"code": True, "group": True, "description": True, "value": ":.2f"},
+            )
+            fig.update_traces(hovertemplate=(
                 "<b>%{customdata[0]}</b><br>"
                 "Score: %{y:.2f}<br>"
                 "Group: %{customdata[1]}<br>"
                 "%{customdata[2]}"
+            ))
+            fig.update_layout(
+                xaxis_title="Year", yaxis_title="Score",
+                legend_title="Series", height=p_height,
+                margin=dict(l=12, r=12, t=70, b=10),
             )
-        )
+            return fig
+
+        # ----- 3D (new) -----
+        labels = sorted(df_plot["label"].dropna().unique().tolist())
+        lane_map = {lab: i for i, lab in enumerate(labels)}
+        df_plot = df_plot.copy()
+        df_plot["lane"] = df_plot["label"].map(lane_map)
+
+        fig = go.Figure()
+        for lab in labels:
+            d = df_plot[df_plot["label"] == lab].sort_values("Year")
+            # optional text labels on every point (can be toggled)
+            trace_mode = "lines+markers" + ("+text" if show_point_labels_3d else "")
+            fig.add_trace(go.Scatter3d(
+                x=d["Year"].astype(float),
+                y=[lane_map[lab]] * len(d),            # each series on its own “lane”
+                z=d["value"].astype(float),
+                mode=trace_mode,
+                name=lab,
+                text=(d["label"] if show_point_labels_3d else None),
+                marker=dict(size=marker_size_3d),
+                line=dict(width=2),
+                hovertemplate="Series: %{fullData.name}<br>Year=%{x}<br>Score=%{z:.2f}<extra></extra>",
+            ))
+
+        grid_gray = "#808080"  # visible on dark and light themes
         fig.update_layout(
-            xaxis_title="Year", yaxis_title="Score",
-            legend_title="Series", height=p_height,
+            title=title,
+            height=p_height,
             margin=dict(l=12, r=12, t=70, b=10),
+            template=template,
+            scene=dict(
+                xaxis=dict(
+                    title="Year",
+                    gridcolor=grid_gray, zeroline=False,
+                    showbackground=False, backgroundcolor="rgba(0,0,0,0)",
+                ),
+                yaxis=dict(
+                    title="Series",
+                    tickmode="array",
+                    tickvals=list(lane_map.values()),
+                    ticktext=labels,
+                    gridcolor=grid_gray, zeroline=False,
+                    showbackground=False, backgroundcolor="rgba(0,0,0,0)",
+                ),
+                zaxis=dict(
+                    title="Score",
+                    gridcolor=grid_gray, zeroline=False,
+                    showbackground=False, backgroundcolor="rgba(0,0,0,0)",
+                ),
+            ),
         )
+
         return fig
 
 
@@ -1528,10 +1583,8 @@ class ProjectKit:
         sort_desc: bool = True,
         template: str = "plotly_dark",
         fig_height: int = 520,
-        fig_width: int = 960,
+        fig_width: int = 960        
     ):
-        import numpy as np
-        import plotly.express as px
 
         def _as_list(x):
             if x is None: return None
@@ -4065,7 +4118,12 @@ class ProjectKit:
         title: str | None = None,
         y_padding: float = 0.03,
         clip_to_bounds: bool = True,
-        connect_gap: bool = True,          # NEW: draw connector between history and forecast
+        connect_gap: bool = True,
+        fig_height: int=650,
+        as_3d: bool = False,
+        ribbon_halfwidth: float = 0.30,      # thickness of the PI “ribbon” on Y
+        marker_size_3d: int = 3,
+        grid_color_3d: str = "#808080",        
     ) -> go.Figure:
         # -------- choose series ----------
         pairs = fc_df[["geo_level", "geo", "target_level", "target"]].drop_duplicates()
@@ -4137,6 +4195,132 @@ class ProjectKit:
 
         # -------- figure ----------
         fig = go.Figure()
+
+        # ----------------- 3D branch -----------------
+        if as_3d:
+
+            fig = go.Figure()
+
+            # Actuals (Y=0 lane)
+            last_hist_year = None
+            last_hist_val  = None
+            if len(x_hist) > 0:
+                fig.add_trace(go.Scatter3d(
+                    x=x_hist, y=[0]*len(x_hist), z=y_hist,
+                    mode="lines+markers", name="Actual",
+                    line=dict(width=2), marker=dict(size=marker_size_3d)
+                ))
+                last_hist_year = int(max(x_hist))
+                last_hist_val  = float(y_hist[-1])
+
+            # Forecast arrays
+            x_fc  = fc_sel["year"].astype(int).to_list()
+            yhat  = fc_sel["yhat"].astype(float).to_numpy()
+            lo80  = fc_sel["lo80"].astype(float).to_numpy()
+            hi80  = fc_sel["hi80"].astype(float).to_numpy()
+            lo95  = fc_sel["lo95"].astype(float).to_numpy()
+            hi95  = fc_sel["hi95"].astype(float).to_numpy()
+
+            # Prediction-interval ribbons as translucent surfaces
+            y_band = [-ribbon_halfwidth, ribbon_halfwidth]
+            if show_pi95:
+                z95 = np.vstack([lo95, hi95])
+                fig.add_trace(go.Surface(
+                    x=x_fc, y=y_band, z=z95, showscale=False,
+                    opacity=0.18, name="95% PI"
+                ))
+            if show_pi80:
+                z80 = np.vstack([lo80, hi80])
+                fig.add_trace(go.Surface(
+                    x=x_fc, y=y_band, z=z80, showscale=False,
+                    opacity=0.28, name="80% PI"
+                ))
+
+            # Forecast mean on the Y=0 lane
+            fig.add_trace(go.Scatter3d(
+                x=x_fc, y=[0]*len(x_fc), z=yhat,
+                mode="lines+markers", name="Forecast",
+                line=dict(width=2, dash="dash"),
+                marker=dict(size=marker_size_3d)
+            ))
+
+            # Connector from last actual to first forecast
+            if connect_gap and last_hist_year is not None and len(x_fc) > 0:
+                fig.add_trace(go.Scatter3d(
+                    x=[last_hist_year, x_fc[0]], y=[0, 0], z=[last_hist_val, float(yhat[0])],
+                    mode="lines", line=dict(width=1.5, dash="dot", color="rgba(80,80,80,0.9)"),
+                    showlegend=False
+                ))
+
+            # Auto Z range from all actuals + forecast columns (respect bounds)
+            all_vals = []
+            if y_hist: all_vals.extend(y_hist)
+            all_vals.extend(fc_sel[["yhat","lo80","hi80","lo95","hi95"]].to_numpy().ravel().tolist())
+            all_vals = [v for v in all_vals if pd.notna(v)]
+            if len(all_vals) == 0:
+                z0, z1 = 0.0, 100.0
+            else:
+                zmin, zmax = float(np.nanmin(all_vals)), float(np.nanmax(all_vals))
+                span = max(1e-6, zmax - zmin)
+                pad = max(0.5, y_padding * span)
+                z0, z1 = zmin - pad, zmax + pad
+                if clip_to_bounds:
+                    z0, z1 = max(0.0, z0), min(100.0, z1)
+
+            # Title label (Goal/Group/Overall) like your 2D code
+            if tl == "goal":
+                tlabel = f"SDG {int(str(target).split('_')[-1])}"
+            elif tl == "group":
+                tlabel = str(target).title()
+            else:
+                tlabel = "Overall"
+            ttl = title or f"{tlabel} • {gl.title()}: {geo}"
+
+            # Determine min/max year across actuals + forecast for a sane X range
+            years_all = []
+            if len(x_hist) > 0: years_all.extend(x_hist)
+            years_all.extend(x_fc)
+            min_year = int(min(years_all))
+            max_year = int(max(years_all))
+
+            fig.update_layout(
+                title=ttl,
+                template=template,
+                height=fig_height,
+                legend=dict(orientation="h", x=0, y=-0.12),
+                margin=dict(t=60, r=20, b=80, l=20),
+                scene=dict(
+                    xaxis=dict(
+                        title="Year",
+                        range=[min_year, max_year], autorange=False,
+                        dtick=5, tickformat="d",
+                        gridcolor=grid_color_3d, showbackground=False, zeroline=False
+                    ),
+                    yaxis=dict(
+                        title="", showgrid=False, showticklabels=False,
+                        showbackground=False
+                    ),
+                    zaxis=dict(
+                        title="Score (0–100)",
+                        range=[z0, z1], gridcolor=grid_color_3d,
+                        showbackground=False, zeroline=False
+                    ),
+                    bgcolor="rgba(0,0,0,0)"
+                ),
+            )
+
+            # Optional vertical “history ends” line in 3D
+            if show_boundary and last_hist_year is not None:
+                fig.add_trace(go.Scatter3d(
+                    x=[last_hist_year, last_hist_year],
+                    y=[-ribbon_halfwidth, ribbon_halfwidth],
+                    z=[z0, z1],
+                    mode="lines", line=dict(color="gray", width=1, dash="dot"),
+                    showlegend=False, hoverinfo="skip"
+                ))
+
+            return fig
+        # --------------- end 3D branch ---------------
 
         # Actuals
         last_hist_year = None
@@ -4222,6 +4406,7 @@ class ProjectKit:
         fig.update_layout(
             title=ttl,
             template=template,
+            height=fig_height,
             hovermode="x unified",
             legend=dict(orientation="h", x=0, y=-0.15),
             margin=dict(t=60, r=20, b=80, l=20)
