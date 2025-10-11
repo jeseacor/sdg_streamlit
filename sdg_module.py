@@ -1750,7 +1750,11 @@ class ProjectKit:
         label_top: int = 5,
         fig_height: int = 520,
         fig_width: int | None = None,
-        plot_template="plotly_dark"
+        plot_template="plotly_dark",
+        as_3d: bool = False,
+        label_all_3d: bool = False,      # show every country name when 3D
+        label_font_size: int = 10,     # small, or it gets messy
+        marker_size: int = 10,      
     ):
         d = df_sdg.copy()
 
@@ -1818,6 +1822,42 @@ class ProjectKit:
         lab |= set(out.sort_values("pct_change", ascending=True).head(label_top)["Country"])
         out["label"] = np.where(out["Country"].isin(lab), out["Country"], "")
 
+
+        if as_3d:
+            text_col = "Country" if label_all_3d else "label"
+            fig = px.scatter_3d(
+                out, x="end", y="pct_change", z="start",
+                text=text_col,
+                color="bucket", hover_name="Country",
+                hover_data={"Region": True, "start":":.2f", "end":":.2f", "pct_change":":.2f"},
+                height=fig_height, width=fig_width,
+                title=f"Leaders & Laggards (3D) — {region_title} • {label} • {start_year}→{end_year}",
+                labels={
+                    "end":   f"{label} (end year)",
+                    "pct_change": f"% change {start_year}→{end_year}",
+                    "start": f"{label} (start year)"
+                },
+            )
+            fig.update_traces(mode="markers+text",
+                  marker=dict(size=marker_size, opacity=0.8),
+                  textfont=dict(size=label_font_size))
+            fig.update_layout(
+                template=plot_template,
+                legend_title_text="Quadrant",
+                scene=dict(
+                    xaxis_title=f"{label} ({end_year})",
+                    yaxis_title=f"% change {start_year}→{end_year}",
+                    zaxis_title=f"{label} ({start_year})",
+                )
+            )
+            # same table you already return
+            table = (out[["Region","Country","start","end","pct_change","bucket"]]
+                    .sort_values(["bucket","end"], ascending=[True, False])
+                    .reset_index(drop=True))
+            return fig, table
+
+
+
         fig = px.scatter(
             out, x="end", y="pct_change", color="bucket",
             text="label",               # <- only selected names show
@@ -1828,12 +1868,17 @@ class ProjectKit:
             title=f"Leaders & Laggards — {region_title} • {label} • {start_year}→{end_year}",
             labels={"end": f"{label} (end year)", "pct_change": f"% change {start_year}→{end_year}"},
         )
-        fig.update_traces(textposition="top center", marker_size=10, cliponaxis=False)
+
+        fig.update_traces(textposition="top center", marker_size=label_font_size, cliponaxis=False)
         fig.update_layout(hovermode="closest", hoverlabel=dict(namelength=-1), legend_title_text="Quadrant", template=plot_template)
 
         fig.add_vline(x=x_med, line_dash="dot", line_color="#888")
         fig.add_hline(y=y_med, line_dash="dot", line_color="#888")
-        fig.update_traces(marker_size=10, textposition="top center")
+        fig.update_traces(marker_size=marker_size, textposition="top center")
+
+        fig.update_traces(mode="markers+text",
+                marker=dict(size=marker_size, opacity=0.8),
+                textfont=dict(size=label_font_size))        
 
         # 8) Sorted table (descending by pct_change) with Region included
         table = (out[["Region", "Country", "start", "end", "pct_change", "bucket"]]

@@ -575,9 +575,9 @@ if page == "Performance Rankings":
         show_plot(fig=fig, page_key="pct_change_sdg")
 
     elif sub == "Quadrant Scatter":
-        c1, c2, c3, c4, c5 = st.columns(5)
+        c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
         with c1:
-            #value_col = st.selectbox("Goal/SDG or Group)", sorted(GOAL_COLS + SDG_COLS + GROUPS))
+            #value_col = st.selectbox("Goal/SDG or Group)", sorted(GOAL_COLS + SDG_COLS + GROUPS)) 
             goal_opts = ["Overall Score", *GOAL_COLS, *GROUPS, *SDG_COLS]
             sel = st.selectbox("Goal or Group", goal_opts, index=0, key="quad_goal_choice")
             value_col = None if sel in ("", "Overall Score") else sel
@@ -591,15 +591,26 @@ if page == "Performance Rankings":
         with c4:
             y0, y1 = st.select_slider("Start → End", options=YEARS, value=(YEARS[0], YEARS[-1]))
         with c5:
-            h = st.slider("Figure height", 200, 1200, 500, step=50, key="quad_h") 
+            dot_sz = st.slider("Dot size", 2, 12, 4, 1)
+        with c6:
+            f_size = st.slider("Lable size", 8, 20, 12, 2)
+        with c7:
+            h = st.slider("Figure height", 200, 1200, 700, step=50, key="quad_h") 
 
+        view3d = st.toggle("3D view", value=False, key="quad_3d")
+        #label_all = st.toggle("Show labels (3D)", value=True, key="quad_labels") if view3d else False
+        
         fig_scat, tbl_scat = kit.leaders_laggards_scatter(
             df_sdg=df_sdg, df_lookup=df_lookup,
             start_year=int(y0), end_year=int(y1),
             region=value_reg,
             measure=value_col,
             label_top=top_n,
-            fig_height=h
+            fig_height=h,
+            as_3d=view3d,
+            #label_all_3d=label_all,
+            marker_size=dot_sz,     
+            label_font_size=f_size       
         )
         show_plot(fig=fig_scat, page_key="leaders_laggards_scatter")
 
@@ -917,7 +928,7 @@ if page == "Network & Structure":
     #tab_net, tab_pca, tab_den, tab_chd = st.tabs(["Network Graph", "PCA / Biplot", "Dendrogram", "Chord Diagram"])
 
     if sub == "Network Graph":
-        #st.subheader("plot_sdg_network")  
+        #st.subheader("plot_sdg_network")
         c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
             level = st.selectbox("Level", ["goal", "sdg"], index=0, key="net_level")
@@ -937,11 +948,11 @@ if page == "Network & Structure":
             elif entity_type == "Country":
                 entities = st.multiselect("Countries", COUNTRIES, key="net_countries")
         with c3:
-            # --- time controls depend on selected entities ---
+            # --- time controls depend on selected entities --- 
             single_country = (entity_type == "Country" and len(entities) == 1)
 
             if single_country:
-                # force a years range, agg='none', min_non_null=5
+                # force a years range, agg='none', min_non_null=5 
                 y0, y1 = st.select_slider(
                     "Years (required for a single country)",
                     options=YEARS,
