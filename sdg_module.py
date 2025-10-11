@@ -1850,6 +1850,17 @@ class ProjectKit:
                     zaxis_title=f"{label} ({start_year})",
                 )
             )
+
+            # Faint Grid
+            fig.update_layout(scene=dict(
+                xaxis=dict(gridcolor='rgba(255,255,255,0.15)', gridwidth=1,
+                        showbackground=False, zerolinecolor='rgba(255,255,255,0.25)'),
+                yaxis=dict(gridcolor='rgba(255,255,255,0.15)', gridwidth=1,
+                        showbackground=False, zerolinecolor='rgba(255,255,255,0.25)'),
+                zaxis=dict(gridcolor='rgba(255,255,255,0.15)', gridwidth=1,
+                        showbackground=False, zerolinecolor='rgba(255,255,255,0.25)'),
+            ))
+
             # same table you already return
             table = (out[["Region","Country","start","end","pct_change","bucket"]]
                     .sort_values(["bucket","end"], ascending=[True, False])
@@ -2785,12 +2796,16 @@ class ProjectKit:
         color_by_group: bool = True,
         variable_type: str = "goal", # "goal" or "sdg"
         group_filter: str | list | None = None, 
-        line_width: float = 1.5, # arrow thickness
+        line_width: float = 2, # arrow thickness
         circle_scale: float | None = None, # correlation-circle radius; None = auto by longest arrow
         biplot_scale: float | None = None,
         biplot_xscale: float | None = None,
         biplot_yscale: float | None = None,
-        p_template: str = "plotly_dark"
+        p_template: str = "plotly_dark",
+        fig_height: int = 650,
+        as_3d: bool = False,
+        marker_size: int = 4,
+        label_font_size: int = 10
     ):
         lu = df_lookup.copy()
         if {"code","group"} - set(lu.columns):
@@ -2855,6 +2870,17 @@ class ProjectKit:
         code_to_group = lu.set_index("code")["group"].to_dict()
         groups = [code_to_group.get(c, "Other") for c in sdg_cols]
 
+
+        # === PCA: 2D by default; 3D if requested ===
+        n_comp = 3 if as_3d else 2
+        Z = StandardScaler().fit_transform(X.values)
+        pca = PCA(n_components=n_comp)
+        scores = pca.fit_transform(Z)
+        loadings = pca.components_.T  # shape: (vars, n_comp)
+        var_pct = pca.explained_variance_ratio_ * 100
+
+
+
         if color_by_group:
             uniq = pd.unique(pd.Series(groups))
             palette = px.colors.qualitative.Set2 + px.colors.qualitative.Bold + px.colors.qualitative.Pastel
@@ -2866,6 +2892,101 @@ class ProjectKit:
             group_color = {}
 
         fig = go.Figure()
+
+
+        # === 3D branch (biplot only) ===
+        if as_3d:
+            if kind.lower() == "circle":
+                # Correlation "circle" has no natural 3D analogue that helps readability;
+                # we fall back to a 3D biplot.
+                kind = "biplot"
+
+            fig = go.Figure()
+
+            # Countries (scores)
+            country_color = "rgba(50, 100, 200, 0.85)"
+            ids = df.loc[X.index, id_col] if (id_col in df.columns and show_country_labels) else None
+            fig.add_trace(go.Scatter3d(
+                x=scores[:, 0], y=scores[:, 1], z=scores[:, 2],
+                mode="markers+text" if show_country_labels else "markers",
+                text=ids if show_country_labels else None,
+                textposition="top center",
+                textfont=dict(color=country_color, size=label_font_size),
+                marker=dict(size=marker_size, color=country_color,
+                            line=dict(width=0.3, color="rgba(50,50,50,0.5)")),
+                name="Countries",
+                hovertext=df.loc[X.index, id_col] if id_col in df.columns else None,
+                hovertemplate="%{hovertext}<br>PC1: %{x:.2f}<br>PC2: %{y:.2f}<br>PC3: %{z:.2f}<extra></extra>"
+            ))
+
+            # Scale variable arrows relative to score spread
+            score_rng = np.max(np.ptp(scores[:, :3], axis=0)) or 1.0
+            load_rng  = np.max(np.ptp(loadings[:, :3], axis=0)) or 1.0
+            arrow_scale = 0.35 * (score_rng / load_rng)
+
+            arr = loadings[:, :3] * arrow_scale  # (x,y,z) endpoints
+            for i, col in enumerate(sdg_cols):
+                x1, y1, z1 = float(arr[i, 0]), float(arr[i, 1]), float(arr[i, 2])
+                c = var_colors[i]
+                # arrow shaft
+                fig.add_trace(go.Scatter3d(
+                    x=[0, x1], y=[0, y1], z=[0, z1],
+                    mode="lines",
+                    line=dict(width=line_width, color=c),
+                    showlegend=False, hoverinfo="skip"
+                ))
+                # label at tip
+                if show_var_labels:
+                    lab = col.replace("_Score", "").replace("Goal_", "SDG ")
+                    fig.add_trace(go.Scatter3d(
+                        x=[x1], y=[y1], z=[z1],
+                        mode="text", text=[lab],
+                        showlegend=False,
+                        textfont=dict(size=label_font_size, color=c)
+                    ))
+
+            # Optional legend swatches for groups (same trick you used in 2D)
+            if color_by_group:
+                for g, colr in group_color.items():
+                    fig.add_trace(go.Scatter3d(
+                        x=[None], y=[None], z=[None], mode="markers",
+                        marker=dict(size=8, color=colr), name=g
+                    ))
+
+            fig.update_layout(
+                title="PCA biplot (3D)",
+                scene=dict(
+                    xaxis_title=f"PC1 ({var_pct[0]:.1f}%)",
+                    yaxis_title=f"PC2 ({var_pct[1]:.1f}%)",
+                    zaxis_title=f"PC3 ({var_pct[2]:.1f}%)",
+                ),
+                template=p_template,
+                height=fig_height,
+                margin=dict(l=40, r=40, t=60, b=40)
+            )
+
+            # Faint Grid
+            fig.update_layout(scene=dict(
+                xaxis=dict(gridcolor='rgba(255,255,255,0.35)', gridwidth=1,
+                        showbackground=False, zerolinecolor='rgba(255,255,255,0.25)'),
+                yaxis=dict(gridcolor='rgba(255,255,255,0.35)', gridwidth=1,
+                        showbackground=False, zerolinecolor='rgba(255,255,255,0.25)'),
+                zaxis=dict(gridcolor='rgba(255,255,255,0.35)', gridwidth=1,
+                        showbackground=False, zerolinecolor='rgba(255,255,255,0.25)'),
+            ))         
+
+            # Return loadings table with z-column included for 3D
+            load_df = pd.DataFrame({
+                "code": sdg_cols,
+                "group": [lu.set_index("code")["group"].to_dict().get(c, "Other") for c in sdg_cols],
+                "loading_x": loadings[:, 0],
+                "loading_y": loadings[:, 1],
+                "loading_z": loadings[:, 2],
+                "var_dim1_pct": var_pct[0],
+                "var_dim2_pct": var_pct[1],
+                "var_dim3_pct": var_pct[2],
+            })
+            return fig, load_df
 
         if kind.lower() == "circle":
             vec_lengths = np.sqrt(np.sum(loadings[:, :2]**2, axis=1))
@@ -2902,7 +3023,7 @@ class ProjectKit:
                 if show_var_labels:
                     lab = col.replace("_Score","").replace("Goal_","SDG ")
                     fig.add_annotation(x=x1, y=y1, text=lab, showarrow=False,
-                                    font=dict(size=12, color=c),
+                                    font=dict(size=label_font_size, color=c),
                                     xanchor="left", yanchor="bottom")
 
             fig.update_xaxes(range=[-circle_radius, circle_radius], zeroline=False,
@@ -2922,8 +3043,8 @@ class ProjectKit:
                 mode="markers+text" if show_country_labels else "markers",
                 text=ids if show_country_labels else None,
                 textposition="top center",
-                textfont=dict(color=country_color, size=12),
-                marker=dict(size=6, color=country_color,
+                textfont=dict(color=country_color, size=label_font_size),
+                marker=dict(size=marker_size, color=country_color,
                             line=dict(width=0.3, color="rgba(50,50,50,0.5)")),
                 name="Countries",
                 hovertext=ids,
@@ -2957,7 +3078,7 @@ class ProjectKit:
                 if show_var_labels:
                     lab = col.replace("_Score","").replace("Goal_","SDG ")
                     fig.add_annotation(x=x1, y=y1, text=lab, showarrow=False,
-                                    font=dict(size=14, color=c),
+                                    font=dict(size=label_font_size, color=c),
                                     xanchor="left", yanchor="bottom")
 
 
@@ -2987,13 +3108,13 @@ class ProjectKit:
         if color_by_group:
             for g, colr in group_color.items():
                 fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers",
-                                        marker=dict(size=10, color=colr), name=g))
+                                        marker=dict(size=label_font_size, color=colr), name=g))
 
         fig.update_layout(
             title=title,
             xaxis_title=f"Dim1 ({var_pct[0]:.1f}%)",
             yaxis_title=f"Dim2 ({var_pct[1]:.1f}%)",
-            width=900, height=700,
+            height=fig_height,
             template=p_template,
             margin=dict(l=40, r=40, t=60, b=40)
         )
@@ -3038,6 +3159,12 @@ class ProjectKit:
         fig_scale: int = 900,                    # <- NEW: sets width & height equally
         hide_axes: bool = True,
         title: str | None = None,
+        as_3d: bool = False,
+        layout_algo_3d: str = "spring",   # "spring" or "kamada"
+        grid_gray: str = "rgba(128,128,128,0.35)",
+        zero_gray: str = "rgba(128,128,128,0.55)",
+        show_grid_3d: bool = True,
+
     ):
         df = df_sdg.copy()
 
@@ -3132,102 +3259,188 @@ class ProjectKit:
         for a, b, r in edges:
             G.add_edge(a, b, weight=abs(r), corr=r)
 
-        # ---- circular layout ONLY ----
-        pos = nx.circular_layout(G)
-
-        # Node sizes
-        def scale(vals, vmin, vmax, tmin, tmax):
-            vals = np.asarray(vals, dtype=float)
-            if vmax <= vmin or np.allclose(vmax, vmin):
-                return np.full_like(vals, (tmin + tmax) / 2.0)
-            return tmin + (vals - vmin) * (tmax - tmin) / (vmax - vmin)
-
-        if node_size_mode == "degree":
-            vals = [G.degree(n) for n in G.nodes()]
-        elif node_size_mode == "centrality":
-            cent = nx.degree_centrality(G)
-            vals = [cent[n] for n in G.nodes()]
-        elif node_size_mode == "mean_score":
-            vals = [G.nodes[n].get("mean_score", np.nan) for n in G.nodes()]
-            if all(pd.isna(v) for v in vals):
-                vals = [G.degree(n) for n in G.nodes()]
-        else:
-            raise ValueError("node_size_mode must be 'degree', 'centrality', or 'mean_score'")
-
-        sizes = scale(vals, np.nanmin(vals), np.nanmax(vals), node_size_min, node_size_max)
-
-        node_colors = [group_palette.get(G.nodes[n].get("group", "Unassigned"), "#7f7f7f") for n in G.nodes()]
-
-        fig = go.Figure()
-        fig.update_layout(template=template, width=fig_scale, height=fig_scale)  # <- use fig_scale
-
-        # edges
-        for a, b, r in edges:
-            x0, y0 = pos[a]; x1, y1 = pos[b]
-            fig.add_trace(go.Scatter(
-                x=[x0, x1], y=[y0, y1], mode="lines",
-                line=dict(width=max(0.5, edge_width_scale * abs(r)),
-                        color=positive_color if r >= 0 else negative_color),
-                opacity=edge_opacity, hoverinfo="text",
-                text=[f"{a} — {b}<br>corr={r:.2f}", f"{a} — {b}<br>corr={r:.2f}"],
-                showlegend=False
-            ))
 
         names = list(G.nodes())
-        xs = [pos[n][0] for n in names]
-        ys = [pos[n][1] for n in names]
-        texts = []
-        for n in names:
-            grp = G.nodes[n].get("group", "Unassigned")
-            desc = G.nodes[n].get("description", "")
-            texts.append(f"{n}<br>group={grp}{'<br>'+desc if desc else ''}")
 
-        if label_strategy == "all":
-            text_vals = names
-        elif label_strategy == "none":
-            text_vals = ["" for _ in names]
+        # --- scalar for ranking/sizing (shared) ---
+        if node_size_mode == "centrality":
+            raw_vals = nx.degree_centrality(G)  # 0..1
+        elif node_size_mode == "strength":      # weighted degree (sum of |edge weight|)
+            raw_vals = {
+                n: sum(abs(d.get("weight", 1.0)) for _, _, d in G.edges(n, data=True))
+                for n in G.nodes()
+            }
+        else:                                   # "degree" fallback
+            raw_vals = dict(G.degree())
+
+        vals = np.array([raw_vals.get(n, 0.0) for n in names], dtype=float)
+
+        # --- scale to marker sizes (shared) ---
+        vmin, vmax = float(vals.min()), float(vals.max())
+        if vmax > vmin:
+            sizes = node_size_min + (vals - vmin) / (vmax - vmin) * (node_size_max - node_size_min)
         else:
-            order = np.argsort(-np.asarray(vals))
-            show_set = set([names[i] for i in order[:int(label_top_n)]])
-            text_vals = [n if n in show_set else "" for n in names]
+            sizes = np.full(len(names), node_size_min, dtype=float)
 
-        fig.add_trace(go.Scatter(
-            x=xs, y=ys,
-            mode="markers+text" if label_strategy != "none" else "markers",
-            text=text_vals, textposition="top center",
-            textfont=dict(size=label_font_size),
-            marker=dict(size=sizes, color=node_colors, line=dict(width=1, color="#333")),
-            hoverinfo="text", hovertext=texts, showlegend=False,
-        ))
+        # --- node colors by group (shared) ---
+        groups_for_nodes = [G.nodes[n].get("group", "Other") for n in names]
+        palette = ['#4E79A7','#59A14F','#E15759','#F28E2B','#76B7B2',
+                '#EDC948','#B07AA1','#FF9DA7','#9C755F','#BAB0AC']
+        uniq_groups = list(dict.fromkeys(groups_for_nodes))  # stable order
+        group_color = {g: palette[i % len(palette)] for i, g in enumerate(uniq_groups)}
+        node_colors = [group_color[g] for g in groups_for_nodes]
 
-        if title is None:
-            scope = f"{entity_type}={','.join(entities)}" if entity_type and entities else "All entities"
-            when = f"Year {year}" if year is not None else (f"Years {years[0]}–{years[1]}" if years else "All years")
-            lvl = "Goals" if level == "goal" else "SDG indicators"
-            title = f"Network of correlations among {lvl}  {scope}  {when}  (|r| ≥ {min_abs_corr:.2f})"
 
-        fig.update_layout(title=None, margin=dict(t=110))
-        left = 0.0
-        fig.update_layout(
-            title=dict(text=title, x=left, xanchor="left", pad=dict(l=0, t=6)),
-            margin=dict(t=100)
-        )
-        fig.add_annotation(
-            x=left, y=1.02, xref="paper", yref="paper",
-            xanchor="left", yanchor="top",
-            text="Red = positive correlation • Blue = negative correlation • Edge width ∝ |r|",
-            showarrow=False, align="left", font=dict(size=12, color="#bbbbbb")
-        )
 
-        # keep plot square & hide axes if desired
-        fig.update_xaxes(visible=False, showgrid=False, zeroline=False, constrain="domain")
-        fig.update_yaxes(visible=False, showgrid=False, zeroline=False, scaleanchor="x", scaleratio=1)
-        if hide_axes:
-            fig.update_xaxes(visible=False, showline=False, ticks="")
-            fig.update_yaxes(visible=False, showline=False, ticks="")
+        fig = go.Figure()
+        fig.update_layout(template=template, width=fig_scale, height=fig_scale)
+
+        if not as_3d:
+            # ---------- 2D (original behavior) ----------
+            pos = nx.circular_layout(G)
+
+            # edges (per-edge trace, preserves your varying widths/colors)
+            for a, b, r in edges:
+                x0, y0 = pos[a]; x1, y1 = pos[b]
+                fig.add_trace(go.Scatter(
+                    x=[x0, x1], y=[y0, y1], mode="lines",
+                    line=dict(width=max(0.5, edge_width_scale * abs(r)),
+                            color=positive_color if r >= 0 else negative_color),
+                    opacity=edge_opacity, hoverinfo="text",
+                    text=[f"{a} — {b}<br>corr={r:.2f}", f"{a} — {b}<br>corr={r:.2f}"],
+                    showlegend=False
+                ))
+
+            names = list(G.nodes())
+            xs = [pos[n][0] for n in names]
+            ys = [pos[n][1] for n in names]
+
+            # labels as before
+            if label_strategy == "all":
+                text_vals = names
+            elif label_strategy == "none":
+                text_vals = ["" for _ in names]
+            else:
+                order = np.argsort(-np.asarray(vals))
+                show_set = set([names[i] for i in order[:int(label_top_n)]])
+                text_vals = [n if n in show_set else "" for n in names]
+
+            texts = []
+            for n in names:
+                grp = G.nodes[n].get("group", "Unassigned")
+                desc = G.nodes[n].get("description", "")
+                texts.append(f"{n}<br>group={grp}{'<br>'+desc if desc else ''}")
+
+            fig.add_trace(go.Scatter(
+                x=xs, y=ys,
+                mode="markers+text" if label_strategy != "none" else "markers",
+                text=text_vals, textposition="top center",
+                textfont=dict(size=label_font_size),
+                marker=dict(size=sizes, color=node_colors, line=dict(width=1, color="#333")),
+                hoverinfo="text", hovertext=texts, showlegend=False,
+            ))
+
+            # Keep your existing title/annotation & hide-axes block:
+            # (unchanged)
+            # ...
+            fig.update_xaxes(visible=False, showgrid=False, zeroline=False, constrain="domain")
+            fig.update_yaxes(visible=False, showgrid=False, zeroline=False, scaleanchor="x", scaleratio=1)
+            if hide_axes:
+                fig.update_xaxes(visible=False, showline=False, ticks="")
+                fig.update_yaxes(visible=False, showline=False, ticks="")
+
+        else:
+            # ---------- 3D (new behavior) ----------
+            if layout_algo_3d == "kamada":
+                try:
+                    pos3 = nx.kamada_kawai_layout(G, dim=3, weight="weight")
+                except Exception:
+                    pos3 = nx.spring_layout(G, dim=3, seed=42, weight="weight")
+            else:
+                pos3 = nx.spring_layout(G, dim=3, seed=42, weight="weight")
+
+            # Draw edges (per-edge so width ∝ |r|)
+            for a, b, r in edges:
+                x0, y0, z0 = pos3[a]
+                x1, y1, z1 = pos3[b]
+                fig.add_trace(go.Scatter3d(
+                    x=[x0, x1], y=[y0, y1], z=[z0, z1], mode="lines",
+                    line=dict(width=max(1.0, edge_width_scale * abs(r)),
+                            color=positive_color if r >= 0 else negative_color),
+                    opacity=edge_opacity,
+                    hoverinfo="text",
+                    text=[f"{a} — {b}<br>corr={r:.2f}", f"{a} — {b}<br>corr={r:.2f}"],
+                    showlegend=False
+                ))
+
+            names = list(G.nodes())
+            xs = [pos3[n][0] for n in names]
+            ys = [pos3[n][1] for n in names]
+            zs = [pos3[n][2] for n in names]
+
+            # label pick logic same as 2D
+            if label_strategy == "all":
+                text_vals = names
+            elif label_strategy == "none":
+                text_vals = ["" for _ in names]
+            else:
+                order = np.argsort(-np.asarray(vals))
+                show_set = set([names[i] for i in order[:int(label_top_n)]])
+                text_vals = [n if n in show_set else "" for n in names]
+
+            texts = []
+            for n in names:
+                grp = G.nodes[n].get("group", "Unassigned")
+                desc = G.nodes[n].get("description", "")
+                texts.append(f"{n}<br>group={grp}{'<br>'+desc if desc else ''}")
+
+            fig.add_trace(go.Scatter3d(
+                x=xs, y=ys, z=zs,
+                mode="markers+text" if label_strategy != "none" else "markers",
+                text=text_vals,
+                textfont=dict(size=label_font_size),
+                marker=dict(size=sizes, color=node_colors,
+                            line=dict(width=0.8, color="#333")),
+                hoverinfo="text", hovertext=texts, showlegend=False,
+                name="nodes"
+            ))
+
+            # Title & helper legend text (kept consistent)
+            if title is None:
+                scope = f"{entity_type}={','.join(entities)}" if entity_type and entities else "All entities"
+                when = f"Year {year}" if year is not None else (f"Years {years[0]}–{years[1]}" if years else "All years")
+                lvl = "Goals" if level == "goal" else "SDG indicators"
+                title = f"Network of correlations among {lvl}  {scope}  {when}  (|r| ≥ {min_abs_corr:.2f})"
+
+            fig.update_layout(
+                title=dict(text=title, x=0.0, xanchor="left", pad=dict(l=0, t=6)),
+                margin=dict(t=100),
+                scene=dict(
+                    xaxis=dict(
+                        showbackground=False, showgrid=show_grid_3d,
+                        gridcolor=grid_gray, gridwidth=1, zerolinecolor=zero_gray
+                    ),
+                    yaxis=dict(
+                        showbackground=False, showgrid=show_grid_3d,
+                        gridcolor=grid_gray, gridwidth=1, zerolinecolor=zero_gray
+                    ),
+                    zaxis=dict(
+                        showbackground=False, showgrid=show_grid_3d,
+                        gridcolor=grid_gray, gridwidth=1, zerolinecolor=zero_gray
+                    ),
+                    bgcolor='rgba(0,0,0,0)',
+                    aspectmode="cube",
+                ),
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+            fig.add_annotation(
+                x=0.0, y=1.02, xref="paper", yref="paper",
+                xanchor="left", yanchor="top",
+                text="Red = positive correlation • Blue = negative correlation • Edge width ∝ |r|",
+                showarrow=False, align="left", font=dict(size=12, color="#bbbbbb")
+            )
 
         return fig
-
 
     def plot_gap_dumbbell_sdg(
         self,

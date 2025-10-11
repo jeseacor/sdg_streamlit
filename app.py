@@ -960,7 +960,7 @@ if page == "Network & Structure":
                     key="net_years",
                 )
                 year, years = None, (int(y0), int(y1))
-                #st.info("Single country selected → using a year range with agg='none' and min_non_null=5.")
+                #st.info("Single country selected → using a year range with agg='none' and min_non_null=5.") 
             else:
                 year = st.selectbox("Year", YEARS, index=len(YEARS) - 1, key="net_year")
                 years = None
@@ -970,6 +970,8 @@ if page == "Network & Structure":
 
         with c5:
             p_scale = st.slider("Plot scale", 700, 2000, 1000, step=10, key="gr_h")
+        
+        net3d = st.toggle("3D network", value=False, key="net_3d")
 
         # --- call plotter ---
         try:
@@ -984,6 +986,7 @@ if page == "Network & Structure":
                 years=years,
                 fig_scale=p_scale,
                 min_abs_corr=float(min_abs_corr),
+                as_3d=net3d
             )
             if single_country:
                 kwargs["agg"] = "none"
@@ -997,8 +1000,8 @@ if page == "Network & Structure":
             st.warning(f"Could not render network: {e}")
 
     elif sub == "PCA / Biplot":
-        #st.subheader("plot_sdg_pca")
-        c1, c2, c3, c4, c5 = st.columns(5)
+        #st.subheader("plot_sdg_pca")     
+        c1, c2, c3, c4, c5, c6, c7, c8 = st.columns(8)
         with c1:
             year = st.selectbox("Year", YEARS, index=len(YEARS)-1, key="pca_year")
         with c2:
@@ -1009,6 +1012,15 @@ if page == "Network & Structure":
             region_filter = st.selectbox("Region filter", [None] + REGIONS, index=0)
         with c5:
             kind = st.selectbox("Kind", ["biplot", "circle"], index=0)
+        with c6:
+            dot_sz = st.slider("Dot size", 2, 12, 4, 1)
+        with c7:
+            f_size = st.slider("Lable size", 8, 20, 12, 2)
+        with c8:
+            h = st.slider("Figure height", 200, 1200, 700, step=50, key="pca_h") 
+
+        pca_3d = st.toggle("3D PCA (PC1–PC3)", value=False)
+
 
         try:
             pca_result = kit.plot_sdg_pca(
@@ -1025,7 +1037,11 @@ if page == "Network & Structure":
                 variable_type=variable_type,
                 biplot_xscale=2.5,
                 biplot_yscale=3.5,
-                line_width=2
+                line_width=2,
+                as_3d=pca_3d,
+                fig_height=h,
+                label_font_size=f_size, 
+                marker_size=dot_sz
             )
             if isinstance(pca_result, tuple):
                 fig, load_df = pca_result
