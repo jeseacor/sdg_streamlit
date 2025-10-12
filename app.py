@@ -297,6 +297,9 @@ with st.sidebar:
     linked_image_local("assets/mu_logo.png", "https://www.massey.ac.nz", width=220, radius=5, sidebar=True)
     st.divider()
 
+    if "nav_page" not in st.session_state:
+        st.session_state.nav_page = "Home"
+
     page = option_menu(
         None,  # no title inside the menu
         PAGES,
@@ -422,80 +425,299 @@ st.markdown("""
     font-size: 0.95em;
     color: #ccc;
 }
+.sdg-badge {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    margin: 0.3rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
 .meta { font-size:.9rem; opacity:.85; margin-top:.25rem; }
 </style>
 """, unsafe_allow_html=True)
 
 #logo_path = here / "sdg_grid.png" 
 # -------------------- Home --------------------
-if page == "Home":
 
-    #st.image("assets/goalscope_logo.jpg", use_container_width=True)    
-    #<h1><span class="dot">GOAL</span><span class="brand">Scope </span><span class="sub">{ SDG Analytics Hub }</span></h1>
+if page == "Home":
+        
+# Enhanced Home Page Section for GoalScope SDG Analytics Hub
+# Insert this into your existing app.py where page == "Home"
+    
+    # Hero Section with Enhanced Branding
     st.markdown("""
     <div class="hero">
         <h1><span class="dot">GOAL</span><span class="brand">Scope </span><span class="sub">{ SDG Analytics Hub }</span></h1>
         <p>
-            Welcome to Massey University GOALScope. A complete application for analyzing the latest, dynamic UN Sustainable Development Goals (SDG)
-            data — augmented with fast AI insights.
+            Welcome to Massey University GOALScope — A comprehensive platform for analyzing UN Sustainable Development Goals (SDG)
+            data with AI-powered insights and interactive visualizations.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    #st.divider()
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Quick Stats Metrics Bar
+    m1, m2, m3, m4, m5 = st.columns(5)
+
+    y0, y1 = int(min(YEARS)), int(max(YEARS))
+    
+    with m1:
+        st.metric(
+            label="📊 Data Coverage",
+            value=f"{y0}–{y1}",
+            delta=f"{y1 - y0 + 1} years"
+        )
+    
+    with m2:
+        st.metric(
+            label="🌍 Countries",
+            value=len(COUNTRIES),
+            delta="Global coverage"
+        )
+    
+    with m3:
+        st.metric(
+            label="🎯 SDG Goals",
+            value="17",
+            delta="169 targets"
+        )
+    
+    with m4:
+        st.metric(
+            label="📈 Indicators",
+            value=len(SDG_COLS),
+            delta="Tracked"
+        )
+    
+    with m5:
+        st.metric(
+            label="🌏 Regions",
+            value=len(REGIONS),
+            delta="Analyzed"
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Main Content: Two Column Layout
     c1a, c2a = st.columns([1, 1], vertical_alignment="top")
+    
     with c1a:
+        # Video Section
+        with st.container(border=True):    
+
+            # The 17 SDGs Visual Grid
+            st.markdown('<div class="section-title" style="text-align: center;">🌍 The 17 Sustainable Development Goals</div>', unsafe_allow_html=True)
+            
+            # SDG badges with official colors
+            sdg_data = {
+                1: ("#E5243B", "No Poverty"),
+                2: ("#DDA63A", "Zero Hunger"),
+                3: ("#4C9F38", "Good Health"),
+                4: ("#C5192D", "Quality Education"),
+                5: ("#FF3A21", "Gender Equality"),
+                6: ("#26BDE2", "Clean Water"),
+                7: ("#FCC30B", "Clean Energy"),
+                8: ("#A21942", "Decent Work"),
+                9: ("#FD6925", "Innovation"),
+                10: ("#DD1367", "Reduced Inequalities"),
+                11: ("#FD9D24", "Sustainable Cities"),
+                12: ("#BF8B2E", "Responsible Consumption"),
+                13: ("#3F7E44", "Climate Action"),
+                14: ("#0A97D9", "Life Below Water"),
+                15: ("#56C02B", "Life on Land"),
+                16: ("#00689D", "Peace & Justice"),
+                17: ("#19486A", "Partnerships")
+            }
+
+            # Display SDG badges
+            sdg_html = '<div style="text-align: center; margin: 2rem 0;">'
+            for i, (color, name) in sdg_data.items():
+                sdg_html += f'<a href="https://sdgs.un.org/goals/goal{i}" target="_blank" rel="noopener noreferrer" style="text-decoration: none;">'
+                sdg_html += f'<span class="sdg-badge" style="background-color: {color}; color: white; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; display: inline-block;" '
+                sdg_html += f'onmouseover="this.style.transform=\'scale(1.05)\'; this.style.boxShadow=\'0 4px 8px rgba(0,0,0,0.3)\';" '
+                sdg_html += f'onmouseout="this.style.transform=\'scale(1)\'; this.style.boxShadow=\'none\';">'
+                sdg_html += f'{i}. {name}</span></a>'
+            sdg_html += '</div>'
+
+            st.markdown(sdg_html, unsafe_allow_html=True)
+
+            youtube_autoplay("https://youtu.be/0XTBYMfZyrM?si=yZtN5MVYe4OGoY-t", start=0, loop=True, height=400)
+            st.caption("Learn about the 17 Sustainable Development Goals and their global impact.")        
+
+
+        # Data & Methodology Section
         with st.container(border=True):
-            st.markdown('<div class="section-title">Features</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">📚 Data Sources & Methodology</div>', unsafe_allow_html=True)
+            
+            st.markdown("""
+            **📥 Data Sources:**
+            - UN SDG Database (official statistics)
+            - ArcGIS FeatureServer APIs
+            - Real-time data synchronization
+            - Comprehensive country & regional coverage
+            
+            **🔧 Processing:**
+            - Pandas-based data wrangling
+            - Missing value interpolation
+            - Multi-year aggregation options
+            - Flexible filtering & grouping
+
+            **📊 Analysis Methods:**
+            - Correlation & regression analysis
+            - Time-series forecasting (ETS)
+            - Principal Component Analysis (PCA)
+            - Network graph algorithms
+            
+            **🤖 AI Integration:**
+            - OpenAI GPT models for insights
+            - Context-aware analysis
+            - Cached results for performance
+            - Conversation history tracking
+            """)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+
+    with c2a:
+
+        # Quick Navigation Cards
+        with st.container(border=True):
+            st.markdown('<div class="section-title">⚡ Quick Start</div>', unsafe_allow_html=True)
+            
+            nav_col1, nav_col2 = st.columns(2)
+            
+            with nav_col1:
+                if st.button("📊 View Rankings", use_container_width=True, type="primary"):
+                    st.session_state.nav_page = "Performance Rankings"
+                    if "nav_menu" in st.session_state:
+                        del st.session_state["nav_menu"]                     
+                    st.rerun()
+                
+                if st.button("📈 Analyze Trends", use_container_width=True, type="secondary"):
+                    st.session_state.nav_page = "Trends & Projections"
+                    if "nav_menu" in st.session_state:
+                        del st.session_state["nav_menu"]                           
+                    st.rerun()
+                
+                if st.button("🔗 Explore Networks", use_container_width=True, type="secondary"):
+                    st.session_state.nav_page = "Network & Structure"
+                    if "nav_menu" in st.session_state:
+                        del st.session_state["nav_menu"]                           
+                    st.rerun()
+            
+            with nav_col2:
+                if st.button("🔍 Find Correlations", use_container_width=True, type="secondary"):
+                    st.session_state.nav_page = "Correlations"
+                    if "nav_menu" in st.session_state:
+                        del st.session_state["nav_menu"]                           
+                    st.rerun()
+                
+                if st.button("⚙️ Configure Settings", use_container_width=True, type="secondary"):
+                    st.session_state.nav_page = "Settings"
+                    if "nav_menu" in st.session_state:
+                        del st.session_state["nav_menu"]                           
+                    st.rerun()
+                
+                if st.button("💬 Open Chatbot", use_container_width=True, type="secondary"):
+                    st.session_state.chat_open = True
+                    chat_dialog()
+
+
+        # Features Section
+        with st.container(border=True):
+            st.markdown('<div class="section-title">🚀 Key Features</div>', unsafe_allow_html=True)
             st.markdown("""
             <div class="feature-card"> 
                 <ul>
-                    <li><b>Rankings:</b> Compare Overall Score or any Goal (1–17) / indicator across countries or regions.</li>
-                    <li><b>Timelines:</b> Track changes through time for selected places and measures.</li>
-                    <li><b>Correlations:</b> Scan associations between measures to spot patterns and trade-offs.</li>
-                    <li><b>Summaries:</b> One-click AI insights saved per chart/table for easy revisits.</li>
+                    <li><b>📊 Performance Rankings:</b><br>Compare Overall Score or specific Goals (1–17) across countries and regions with multiple visualization modes.</li>
+                    <li><b>📈 Trends & Projections:</b><br>Track temporal changes and forecast future SDG performance using advanced time-series models.</li>
+                    <li><b>🔗 Network Analysis:</b><br>Visualize goal interdependencies through correlation networks, PCA biplots, and dendrograms.</li>
+                    <li><b>🔍 Correlation Explorer:</b><br>Discover relationships between indicators, goals, and country performance metrics.</li>
+                    <li><b>🤖 AI Insights:</b><br>Generate instant narrative summaries for any chart or table with one-click AI analysis.</li>
+                    <li><b>💬 Interactive Chat:</b><br>Ask questions about SDG data, methodology, and interpretation through the AI chatbot.</li>
                 </ul>
             </div>
             """, unsafe_allow_html=True)
 
+        # Benefits & Use Cases
         with st.container(border=True):
-            st.markdown('<div class="section-title">Benefits</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">✨ Benefits</div>', unsafe_allow_html=True)
             st.markdown("""
             <div class="feature-card"> 
                 <ul>
-                    <li>A single, reliable space to <b>explore, compare, and explain</b> SDG performance.</li>
-                    <li>Clear visuals backed by on-demand AI narratives — great for coursework, reports, and presentations.</li>
-                    <li>Flexible filters for <b>Year</b>, <b>Scope</b> (Country/Region), and <b>Goal/Indicator</b> or <b>Overall</b>.</li>
+                    <li>📚 <b>Academic Research:</b><br>Explore SDG data for coursework, reports, and thesis projects with robust analytical tools.</li>
+                    <li>🎓 <b>Educational Tool:</b><br>Learn about sustainable development through interactive visualizations and AI-guided insights.</li>
+                    <li>📊 <b>Policy Analysis:</b><br>Compare country performance, identify patterns, and understand goal trade-offs.</li>
+                    <li>🔬 <b>Data Science:</b><br>Apply correlation analysis, forecasting, PCA, and network analysis to real-world data.</li>
+                    <li>💡 <b>Quick Insights:</b><br>Generate professional narratives for presentations and reports with AI assistance.</li>
                 </ul>
             </div>
-            """, unsafe_allow_html=True)        
-                        
-    with c2a:
-        with st.container(border=True):    
-            st.markdown('<div class="section-title">The 17 SDGs</div>', unsafe_allow_html=True)
-            youtube_autoplay("https://youtu.be/0XTBYMfZyrM?si=yZtN5MVYe4OGoY-t", start=0, loop=True, height=400)
+            """, unsafe_allow_html=True)
 
-        with st.container(border=True):
-            st.markdown('<div class="section-title">Data & Method</div>', unsafe_allow_html=True)
-            st.markdown("""
-            <div class="feature-card"> 
-                <ul>
-                    <li>Data sourced from <b>ArcGIS FeatureServer / UN SDG APIs</b> and loaded into pandas for wrangling.</li>
-                    <li>Correlation analysis highlights relationships across indicators and goals; literature guides interpretation.</li>
-                    <li>The app integrates <b>NLP</b> to generate dynamic plot insights.</li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)        
-
-    #st.divider()
+    st.markdown("<br>", unsafe_allow_html=True)
 
 
-    c1, c2, c3 = st.columns([1, 4, 1], vertical_alignment="center")
-    with c2:
-        st.image("assets/sdg_grid.png", use_container_width=True)    
+    # Getting Started Guide
+    with st.expander("📖 Getting Started Guide", expanded=False):
+        st.markdown("""
+        ### How to Use GoalScope
+        
+        **1. Explore the Navigation Menu** (left sidebar)
+        - Choose from 7 main sections: Home, Rankings, Trends, Networks, Correlations, Settings, About
+        - Each section offers multiple visualization and analysis modes
+        
+        **2. Customize Your Analysis**
+        - Select years, countries, regions, and specific SDG goals
+        - Apply filters to focus on economic, social, or environmental indicators
+        - Adjust visualization parameters (height, colors, labels)
+        
+        **3. Generate AI Insights**
+        - Click the 🤖 **Generate Insight** button below any chart or table
+        - Insights are automatically saved and can be revisited
+        - Use the chatbot for interactive Q&A about the data
+        
+        **4. Export & Share**
+        - Right-click charts to download as PNG
+        - Copy tables for use in reports and presentations
+        - Share findings with the research community
+        
+        **5. Adjust Settings**
+        - Visit the Settings page to change SDG grouping schemes
+        - Preview changes before applying them globally
+        - Reset to defaults anytime
+        """)
 
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    #st.stop()
+    # Footer with additional info
+    footer_col1, footer_col2, footer_col3 = st.columns(3)
+    
+    with footer_col1:
+        st.markdown("""
+        **📊 Current Dataset**
+        - Years: {y0}–{y1}
+        - Countries: {countries}
+        - Regions: {regions}
+        - Score Range: 0–100
+        """.format(y0=y0, y1=y1, countries=len(COUNTRIES), regions=len(REGIONS)))
+    
+    with footer_col2:
+        st.markdown("""
+        **🔗 Resources**
+        - [UN SDG Portal](https://sdgs.un.org/goals)
+        - [SDG Indicators](https://unstats.un.org/sdgs/)
+        - [Massey University](https://www.massey.ac.nz)
+        """)
+    
+    with footer_col3:
+        st.markdown("""
+        **ℹ️ About This Project**
+        - Course: 158888 – IT Professional Project
+        - Institution: Massey University, NZ
+        - Developer: J.E. Seacor
+        """)
 
 
 if page == "Performance Rankings":
