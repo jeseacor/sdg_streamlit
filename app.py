@@ -160,7 +160,7 @@ if "chat_history" not in st.session_state:
 
 @st.dialog("🤖 Chat with GoalScope Assistant")
 def chat_dialog():
-    st.caption("Ask about goals, indicators, methods, or how to interpret a chart.")
+    st.caption("Ask about goals, indicators, or how to interpret the current chart view.")
 
     # history
     for m in st.session_state.chat_history:
@@ -678,7 +678,6 @@ if page == "Home":
         - Institution: Massey University, NZ
         - Developer: J.E. Seacor
         """)
-
 
 if page == "Performance Rankings":
     st.markdown('<div class="section-title">Performance Rankings</div>', unsafe_allow_html=True)
