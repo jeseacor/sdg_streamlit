@@ -328,15 +328,15 @@ with st.sidebar:
     if prev_page != page:
         st.session_state.chat_open = False
     st.session_state.last_nav_page = page
-
-
     
+    linked_image_local("assets/sdg_logo_b.png", "https://sdgs.un.org/goals", width=180, sidebar=True)
+    
+    st.divider()
+
     if st.button("🤖 Chatbot", key="chat_sidebar_btn", use_container_width=True):
         st.session_state.chat_open = True
         chat_dialog()    
 
-    #st.divider()
-    linked_image_local("assets/sdg_logo_b.png", "https://sdgs.un.org/goals", width=180, sidebar=True)
 
 
 # --- Floating Chat Button (bottom-right) ---
@@ -502,7 +502,7 @@ if page == "Home":
 
     with st.container(border=True): 
         # The 17 SDGs Visual Grid
-        st.markdown('<div class="section-title" style="text-align: center;">🌍 The 17 Sustainable Development Goals</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title" style="text-align: center;">The 17 Sustainable Development Goals</div>', unsafe_allow_html=True)
         
         # SDG badges with official colors
         sdg_data = {
@@ -552,7 +552,7 @@ if page == "Home":
 
         # Data & Methodology Section
         with st.container(border=True):
-            st.markdown('<div class="section-title">📚 Data Sources & Methodology</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">Data Sources & Methodology</div>', unsafe_allow_html=True)
             
             col1a, col2a = st.columns([1, 1], vertical_alignment="top")
             with col1a:
@@ -591,7 +591,7 @@ if page == "Home":
 
         # Features Section
         with st.container(border=True):
-            st.markdown('<div class="section-title">🚀 Key Features</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">Key Features</div>', unsafe_allow_html=True)
             st.markdown("""
                 <ul>
                     <li><b>📊 Performance Rankings:</b> <br>Compare Overall Score or specific Goals (1–17) across countries and regions with multiple visualization modes.</li>
@@ -605,7 +605,7 @@ if page == "Home":
 
         # Benefits & Use Cases
         with st.container(border=True):
-            st.markdown('<div class="section-title">✨ Benefits</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">Benefits</div>', unsafe_allow_html=True)
             st.markdown("""
                 <ul>
                     <li>📚 <b>Academic Research:</b> <br>Explore SDG data for coursework, reports, and thesis projects with robust analytical tools.</li>
@@ -617,7 +617,7 @@ if page == "Home":
             """, unsafe_allow_html=True)
 
         # Getting Started Guide
-        with st.expander("📖 Getting Started Guide", expanded=False):
+        with st.expander("Getting Started Guide", expanded=False):
             st.markdown("""
             ### How to Use GoalScope
             
@@ -647,10 +647,9 @@ if page == "Home":
             """)
         st.markdown("<br>", unsafe_allow_html=True)
 
-
-
     st.markdown("<br>", unsafe_allow_html=True)
 
+    st.divider()
 
     # Footer with additional info
     footer_col1, footer_col2, footer_col3 = st.columns(3)
