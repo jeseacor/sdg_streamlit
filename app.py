@@ -708,7 +708,8 @@ if page == "Performance Rankings":
             value_reg = None if sel in ("", "All Regions") else sel            
         with c4:
             years_range = None
-            y0, y1 = st.select_slider("Range for % Change", options=YEARS, value=(YEARS[0], YEARS[-1]))
+            #y0, y1 = st.select_slider("Range for % Change", options=YEARS, value=(YEARS[0], YEARS[-1]))
+            y0, y1 = st.select_slider("Range for % Change", options=YEARS, value=(2015, YEARS[-1]))
             years_range = (int(y0), int(y1))          
 
         try:
@@ -729,7 +730,7 @@ if page == "Performance Rankings":
     elif sub == "Percent Change":
         c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
-            y0, y1 = st.select_slider("Start → End", options=YEARS, value=(YEARS[0], YEARS[-1]))
+            y0, y1 = st.select_slider("Start → End", options=YEARS, value=(2015, YEARS[-1]))
         with c2:
             level = st.selectbox("Level", ["goal", "sdg"], index=0)
         with c3:
@@ -770,7 +771,7 @@ if page == "Performance Rankings":
         with c3:
             top_n = st.number_input("Show Top/Bottom N", min_value=5, max_value=50, value=5, step=1)
         with c4:
-            y0, y1 = st.select_slider("Start → End", options=YEARS, value=(YEARS[0], YEARS[-1]))
+            y0, y1 = st.select_slider("Start → End", options=YEARS, value=(2015, YEARS[-1]))
         with c5:
             dot_sz = st.slider("Dot size", 2, 12, 4, 1)
         with c6:
@@ -1454,7 +1455,7 @@ elif page == "Correlations":
             agg = st.selectbox("Aggregate", ["mean", "median", "max"], index=0)
             min_abs = st.slider("Min |corr| included", 0.0, 1.0, 0.0, 0.05)
         with c3:
-            y_min, y_max = st.slider("Y range", -1.0, 1.0, (-0.1, 0.5), 0.05)
+            y_min, y_max = st.slider("Y range", -1.0, 1.0, (-0.2, 0.6), 0.05)
         try:
             fig = kit.grouped_corr_barchart(
                 df_sdg=df_sdg,
