@@ -180,8 +180,10 @@ class ProjectKit:
     
     # generic ArcGIS downloader with pagination for the SDR layers
     def get_arcgis_data(self, dataset : str = ""):
+        API_URL = os.getenv("URL_SDR_BACKDATED", "")
+
         if dataset=="sdr_backdated":
-            url = "https://services7.arcgis.com/IyvyFk20mB7Wpc95/arcgis/rest/services/SDR_2025_TIMESERIES_(Backdated_Data)/FeatureServer/0/query"
+            url = API_URL
         elif dataset=="sdr2025":
             url = "https://services7.arcgis.com/IyvyFk20mB7Wpc95/ArcGIS/rest/services/Sustainable_Development_Report_2025_(with_indicators)/FeatureServer/0/query"
         elif dataset=="rawdata":
