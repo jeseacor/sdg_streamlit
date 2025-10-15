@@ -5,3 +5,6 @@ backgroundColor = "#0A2240"          # very dark slate
 secondaryBackgroundColor = "#004b8d" # softer panel
 textColor = "#F8F8F2"                # light grayish white
 font = "sans serif"
+
+[server]
+fileWatcherType = "poll"
