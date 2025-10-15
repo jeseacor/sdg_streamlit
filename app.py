@@ -440,7 +440,10 @@ st.markdown("""
 #logo_path = here / "sdg_grid.png" 
 # -------------------- Home --------------------
 
+
 if page == "Home":
+    
+    y0, y1 = int(min(YEARS)), int(max(YEARS))
         
 # Enhanced Home Page Section for GoalScope SDG Analytics Hub
 # Insert this into your existing app.py where page == "Home"
@@ -460,8 +463,6 @@ if page == "Home":
 
     # Quick Stats Metrics Bar
     m1, m2, m3, m4, m5 = st.columns(5)
-
-    y0, y1 = int(min(YEARS)), int(max(YEARS))
     
     with m1:
         st.metric(
@@ -649,35 +650,6 @@ if page == "Home":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    st.divider()
-
-    # Footer with additional info
-    footer_col1, footer_col2, footer_col3 = st.columns(3)
-    
-    with footer_col1:
-        st.markdown("""
-        **📊 Current Dataset**
-        - Years: {y0}–{y1}
-        - Countries: {countries}
-        - Regions: {regions}
-        - Score Range: 0–100
-        """.format(y0=y0, y1=y1, countries=len(COUNTRIES), regions=len(REGIONS)))
-    
-    with footer_col2:
-        st.markdown("""
-        **🔗 Resources**
-        - [UN SDG Portal](https://sdgs.un.org/goals)
-        - [SDG Indicators](https://unstats.un.org/sdgs/)
-        - [Massey University](https://www.massey.ac.nz)
-        """)
-    
-    with footer_col3:
-        st.markdown("""
-        **ℹ️ About This Project**
-        - Course: 158888 – IT Professional Project
-        - Institution: Massey University, NZ
-        - Developer: J.E. Seacor
-        """)
 
 if page == "Performance Rankings":
     st.markdown('<div class="section-title">Performance Rankings</div>', unsafe_allow_html=True)
@@ -1589,7 +1561,31 @@ elif page == "About":
 
 
 y0, y1 = int(min(YEARS)), int(max(YEARS))
-st.markdown(
-    f"<div class='meta'>Data coverage: <b>{y0}–{y1}</b> • Score scale: 0–100 • Correlation ≠ causation</div>",
-    unsafe_allow_html=True
-)
+st.divider()
+
+# Footer with additional info
+footer_col1, footer_col2, footer_col3 = st.columns(3)
+
+with footer_col1:
+    st.markdown("""
+    **📊 Current Dataset**
+    - Years: {y0}–{y1}
+    - Countries: {countries}
+    - Regions: {regions}
+    """.format(y0=y0, y1=y1, countries=len(COUNTRIES), regions=len(REGIONS)))
+
+with footer_col2:
+    st.markdown("""
+    **🔗 Resources**
+    - [UN SDG Portal](https://sdgs.un.org/goals)
+    - [SDG Indicators](https://unstats.un.org/sdgs/)
+    - [Massey University](https://www.massey.ac.nz)
+    """)
+
+with footer_col3:
+    st.markdown("""
+    **ℹ️ About This Project**
+    - Course: 158888 – IT Professional Project
+    - Institution: Massey University, NZ
+    - Developer: J.E. Seacor
+    """)
