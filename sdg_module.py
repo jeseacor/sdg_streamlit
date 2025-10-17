@@ -353,7 +353,6 @@ class ProjectKit:
 
 
     def plotly_fig_to_data_url(self, fig, *, width=900, height=600, scale=1):
-        """Return data:image/png;base64,... or None if export fails."""
         try:
             png = pio.to_image(fig, format="png", width=width, height=height,
                             scale=scale, engine="kaleido")
@@ -375,11 +374,6 @@ class ProjectKit:
         title: Optional[str] = None,
         nlp_mod: str = "gpt-5-mini",
     ) -> str:
-        """
-        Generate Markdown insights for a Plotly figure OR a pandas DataFrame.
-        - Pass `fig` for chart analysis (vision).
-        - Pass `df` for dataset/table analysis (text profile).
-        """
         assert fig is not None or df is not None, "Provide either `fig` or `df`."
 
         content = []
@@ -435,11 +429,10 @@ class ProjectKit:
 
 
     def set_data_for_chat(self, df_sdg: pd.DataFrame, df_lookup: pd.DataFrame) -> None:
-        """Register dataset context so chat replies can be data-aware (no raw table upload)."""
 
         fp = (int(df_sdg.shape[0]), int(df_sdg.shape[1]), int(df_lookup.shape[0]))
         if getattr(self, "_chat_fp", None) == fp:
-            return  # already primed for this data
+            return 
         self._chat_fp = fp
 
         self._df_sdg = df_sdg
@@ -471,7 +464,6 @@ class ProjectKit:
                 self._retrieval_docs.append(f"{r['code']} ({r['group']}): {r['description']}")
 
     def _retrieve_lookup(self, question: str, k: int = 6) -> str:
-        """Very small keyword retriever over df_lookup text (no external deps)."""
 
         if not getattr(self, "_retrieval_docs", None):
             return ""
@@ -508,11 +500,6 @@ class ProjectKit:
         df: "pd.DataFrame | None" = None,
         title: str | None = None,
     ) -> None:
-        """
-        Make the chatbot 'view-aware' using ONLY fig/df.
-        - fig -> snapshot as PNG data-URL (small)
-        - df  -> compact JSON profile (few rows/cols + schema/stats)
-        """
 
         fp = self._view_fingerprint(fig=fig, df=df)
         if getattr(self, "_chat_view_fp", None) == fp:
@@ -559,13 +546,12 @@ class ProjectKit:
         self._chat_dynamic = f"CURRENT VIEW\nTitle: {title}\nInfo: {info_line}\n"
 
         self._chat_view = {}
-        # figure snapshot
         if fig is not None:
             try:
                 self._chat_view["image"] = self.plotly_fig_to_data_url(fig)
             except Exception:
                 self._chat_view["image"] = None
-        # dataframe compact profile
+
         if df is not None and hasattr(df, "head"):
             try:
                 self._chat_view["profile"] = self._df_compact_profile(
@@ -596,7 +582,6 @@ class ProjectKit:
         if retrieved:
             context += "\nLOOKUP NOTES\n" + retrieved
 
-        # pack brief history + user message
         lines = [f"{m['role'].capitalize()}: {m['content']}" for m in history[-8:]]
         lines.append(f"User: {prompt}")
         packed = f"{context}\n\nConversation so far:\n" + "\n".join(lines)
@@ -614,11 +599,9 @@ class ProjectKit:
         res = client.responses.create(
             model=model,
             instructions=system,
-            input=[{"role": "user", "content": content}],  # now supports text+image+profile
+            input=[{"role": "user", "content": content}],
         )
         return (res.output_text or "").strip()
-
-
 
 
     # endregion
@@ -709,7 +692,6 @@ class ProjectKit:
         geo_level: str | None = None,          # "country" or "region" or None
         geo_names: str | list[str] | None = None  # single name or list of names
     ):
-        # year slice
         df_year = df_sdg[df_sdg["Year"] == year].copy()
         if df_year.empty:
             raise ValueError(f"No rows for Year {year}")
@@ -758,7 +740,6 @@ class ProjectKit:
         meta = df_lookup[["code", "description", "group", "sdg"]].copy()
         merged = means.merge(meta, on="code", how="left")
 
-        # optional filters
         if group_filter:
             groups = [group_filter] if isinstance(group_filter, str) else list(group_filter)
             groups = [g.lower() for g in groups]
@@ -883,7 +864,6 @@ class ProjectKit:
 
         if effective_group == "Region":
             if region_view is None:
-                # original region totals behavior
                 agg_by = ["Region"]
                 y_label = "Region"
                 subtitle_extra = None
@@ -899,7 +879,6 @@ class ProjectKit:
                 y_label = "Country (Region)" if "Region" in d.columns else "Country"
                 subtitle_extra = f"Countries in region(s): {', '.join(regs)}"
         else:
-            # Country mode (default when group_col is None or "Country")
             agg_by = ["Country"]
             y_label = "Country (Region)" if "Region" in d.columns else "Country"
             subtitle_extra = None
@@ -919,7 +898,6 @@ class ProjectKit:
 
         g = g.sort_values(by=value_key, ascending=ascending).head(top_n)
 
-        # auto title
         if title is None:
             rank_word = "Bottom" if ascending else "Top"
             if value_col is None:
@@ -935,8 +913,6 @@ class ProjectKit:
             if subtitle_extra:
                 title += f" • {subtitle_extra}"
 
-        # plot
-        import plotly.express as px
         fig = px.bar(
             g, x=value_key, y=agg_by[0], orientation="h",
             text=value_key, title=title, template=plot_theme
@@ -964,14 +940,12 @@ class ProjectKit:
         agg: str = "mean",
         decimals: int = 2,
         region: str | list[str] = "All Regions",
-        # NEW:
         start_year: int | None = None,
         end_year: int | None = None,
     ) -> pd.DataFrame:
 
         d = df_sdg.copy()
 
-        # --- region filter (unchanged) ---
         def _as_list(x):
             if x is None: return []
             return [x] if isinstance(x, str) else list(x)
@@ -1154,7 +1128,6 @@ class ProjectKit:
         show_point_labels_3d: bool = False,
         marker_size_3d: int = 3,
     ):
-        import plotly.express as px
 
         def _norm_list(x):
             if x is None: return None
@@ -1336,8 +1309,6 @@ class ProjectKit:
         top_mode: str = "top",                 # "top" | "bottom"
         rank_year: int | None = None,          # used in score mode (end-year for ranking)
         region_view: str = "region",           # (Region only) "region" = lines=regions; "countries" = lines=countries-in-region(s)
-
-        # choose how to rank which lines to keep/order
         metric_mode: str = "score",            # "score" | "percent_change"
         start_year: int | None = None,
         end_year: int | None = None,
@@ -1451,7 +1422,6 @@ class ProjectKit:
             order_entities = rank_df.sort_values("rank_metric", ascending=asc)["Entity"].tolist()
             ttl_prefix = "All"
 
-        # --- titles & labels ---
         ents_txt = ", ".join(order_entities) if len(order_entities) < 10 else f"{len(order_entities)} entities"
         title_main = f"{goal_label} ({goal_group})" if goal_group else f"{goal_label}"
 
@@ -1469,8 +1439,6 @@ class ProjectKit:
             legend_title = entity_type
             y_axis_title = goal_label
 
-        # --- figure ---
-        import plotly.express as px
         fig = px.line(
             df_plot, x="Year", y="value", color="Entity", markers=True,
             template=template,
@@ -1487,7 +1455,6 @@ class ProjectKit:
         )
         fig.update_xaxes(dtick=5)
 
-        # clean temp overall column if we created it
         if overall_col == "_overall_tmp_":
             df.drop(columns=[overall_col], inplace=True, errors="ignore")
 
@@ -1519,11 +1486,9 @@ class ProjectKit:
             if x is None: return None
             return [x] if isinstance(x, str) else list(x)
 
-        # keep raw inputs for title
         groups_raw = _as_list(group_filter)
         items_raw  = _as_list(items)
 
-        # pick columns for chosen level
         lvl = level.strip().lower()
         if   lvl == "goal": base_cols = [c for c in df_sdg.columns if isinstance(c, str) and c.startswith("Goal_")]
         elif lvl == "sdg":  base_cols = [c for c in df_sdg.columns if isinstance(c, str) and c.lower().startswith("sdg")]
@@ -1536,13 +1501,11 @@ class ProjectKit:
         look = df_lookup.copy()
         look["group"] = look["group"].astype(str).str.lower()
 
-        # filter by group names if provided
         if groups_raw:
             groups_lc = [g.lower() for g in groups_raw]
             allowed = set(look.loc[look["group"].isin(groups_lc), "code"])
             base_cols = [c for c in base_cols if c in allowed]
 
-        # filter to specific codes or group names via items, if provided
         if items_raw is not None:
             want = []
             for it in items_raw:
@@ -1557,7 +1520,6 @@ class ProjectKit:
         if not base_cols:
             raise ValueError("No columns left after applying filters")
 
-        # slice by entities if requested
         d = df_sdg.copy()
         ent_list = None
         if entity_type is not None and entities is not None:
@@ -1566,13 +1528,11 @@ class ProjectKit:
                 raise ValueError(f"{entity_type} not found in dataframe")
             d = d[d[entity_type].isin(ent_list)]
 
-        # pull start and end year blocks
         ds = d[d["Year"] == int(start_year)]
         de = d[d["Year"] == int(end_year)]
         if ds.empty or de.empty:
             raise ValueError("No rows for the given start or end year")
 
-        # aggregate across rows for each column
         if agg == "median":
             s_vals = ds[base_cols].median(numeric_only=True)
             e_vals = de[base_cols].median(numeric_only=True)
@@ -1580,7 +1540,6 @@ class ProjectKit:
             s_vals = ds[base_cols].mean(numeric_only=True)
             e_vals = de[base_cols].mean(numeric_only=True)
 
-        # build result table
         df_out = pd.DataFrame({
             "code": base_cols,
             "start": s_vals.reindex(base_cols).values.astype(float),
@@ -1590,7 +1549,6 @@ class ProjectKit:
         denom = df_out["start"].replace(0, np.nan)
         df_out["pct_change"] = (df_out["delta"] / denom) * 100.0
 
-        # attach metadata and labels
         meta = look[["code","group","description"]].drop_duplicates()
         df_out = df_out.merge(meta, on="code", how="left")
 
@@ -1607,11 +1565,9 @@ class ProjectKit:
             else:
                 df_out["label"] = df_out["code"]
 
-        # rounding and order
         df_out = df_out.round({"start": decimals, "end": decimals, "delta": decimals, "pct_change": decimals})
         df_out = df_out.sort_values("pct_change", ascending=not sort_desc).reset_index(drop=True)
 
-        # ------------------ dynamic title/subtitle ------------------
         level_txt = "Goals (0–100 index)" if lvl == "goal" else "Indicators (sdg*)"
         groups_txt = None
         if groups_raw:
@@ -1619,7 +1575,6 @@ class ProjectKit:
 
         items_txt = None
         if items_raw:
-            # show up to first 6 to keep tidy
             if len(items_raw) <= 6:
                 items_txt = "Items: " + ", ".join(items_raw)
             else:
@@ -1634,8 +1589,6 @@ class ProjectKit:
 
         agg_txt = f"Aggregation: {agg}"
 
-
-        # compose subtitle parts (only include non-empty)
         parts = [level_txt, groups_txt, items_txt, entity_txt, agg_txt]
         subtitle = " • ".join([p for p in parts if p])
 
@@ -1701,13 +1654,11 @@ class ProjectKit:
 
 
     def _compute_metric(self, d, df_lookup, measure):
-        """Return a Series named 'value' for Overall / Goal_# / group name."""
         if (measure is None) or (str(measure).lower() in ("overall", "overall score")):
             goal_cols = [c for c in d.columns if c.startswith("Goal_")]
             v = d[goal_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
             return v.rename("value"), "Overall Score"
 
-        # group name?
         if "group" in df_lookup.columns:
             groups_lower = df_lookup["group"].astype(str).str.lower().unique()
             if str(measure).lower() in groups_lower:
@@ -1718,7 +1669,6 @@ class ProjectKit:
                 v = d[cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
                 return v.rename("value"), str(measure).title()
 
-        # otherwise assume an existing column (Goal_* or sdg*)
         v = pd.to_numeric(d[measure], errors="coerce")
         return v.rename("value"), str(measure)
 
@@ -1740,14 +1690,12 @@ class ProjectKit:
     ):
         d = df_sdg.copy()
 
-        # 1) Region filter (optional)
         if region and str(region).lower() not in ("all regions", "all", "none"):
             d = d[d["Region"] == region]
             region_title = str(region)
         else:
             region_title = "All Regions"
 
-        # 2) Resolve year bounds from the (possibly region-filtered) data
         yrs = d["Year"].dropna().astype(int)
         if yrs.empty:
             raise ValueError("No years available after filtering; check your inputs.")
@@ -1760,16 +1708,13 @@ class ProjectKit:
 
         d = d[d["Year"].between(start_year, end_year)]
 
-        # 3) Metric (Overall / Goal / Group)
         d["value"], label = self._compute_metric(d, df_lookup, measure)
 
-        # 4) Country-year metric and start/end collapse
         g = (d.groupby(["Country", "Year"], as_index=False)["value"]
             .mean(numeric_only=True))
 
         piv = g.pivot(index="Country", columns="Year", values="value")
 
-        # map Region per Country (mode over the filtered rows)
         region_map = (d.groupby("Country")["Region"]
                         .agg(lambda s: s.dropna().mode().iat[0] if not s.dropna().mode().empty else s.iloc[0]))
 
@@ -1786,7 +1731,6 @@ class ProjectKit:
         out.replace([np.inf, -np.inf], np.nan, inplace=True)
         out.dropna(subset=["pct_change"], inplace=True)
 
-        # 5) Quadrants (medians over the plotted subset)
         x_med = out["end"].median()
         y_med = out["pct_change"].median()
         out["bucket"] = np.select(
@@ -1799,7 +1743,6 @@ class ProjectKit:
             default="Laggard"
         )
 
-        # before plotting
         lab = set(out.sort_values("pct_change", ascending=False).head(label_top)["Country"])
         lab |= set(out.sort_values("pct_change", ascending=True).head(label_top)["Country"])
         out["label"] = np.where(out["Country"].isin(lab), out["Country"], "")
@@ -1833,7 +1776,6 @@ class ProjectKit:
                 )
             )
 
-            # Faint Grid
             fig.update_layout(scene=dict(
                 xaxis=dict(gridcolor='rgba(255,255,255,0.15)', gridwidth=1,
                         showbackground=False, zerolinecolor='rgba(255,255,255,0.25)'),
@@ -1843,7 +1785,6 @@ class ProjectKit:
                         showbackground=False, zerolinecolor='rgba(255,255,255,0.25)'),
             ))
 
-            # same table you already return
             table = (out[["Region","Country","start","end","pct_change","bucket"]]
                     .sort_values(["bucket","end"], ascending=[True, False])
                     .reset_index(drop=True))
@@ -1873,7 +1814,6 @@ class ProjectKit:
                 marker=dict(size=marker_size, opacity=0.8),
                 textfont=dict(size=label_font_size))        
 
-        # 8) Sorted table (descending by pct_change) with Region included
         table = (out[["Region", "Country", "start", "end", "pct_change", "bucket"]]
                 #.sort_values("pct_change", ascending=False)
                 .sort_values(["bucket","end"], ascending=[True, False])
@@ -2156,15 +2096,11 @@ class ProjectKit:
         n_cols: int = 3,
         fig_height: int = 400,
         fig_width: int = 360,
-        # NEW:
         show_values: bool = True,
         value_fmt: str = ".2f",
         value_text_size: int = 10,
         value_text_color: str = "white",
     ):
-        import numpy as np
-        import plotly.graph_objects as go
-        from plotly.subplots import make_subplots
 
         d = df_sdg[df_sdg["Year"] == year].copy()
 
@@ -2215,7 +2151,6 @@ class ProjectKit:
             sub = corr.loc[codes_a, codes_b]
             z = sub.values
 
-            # NEW: text labels for cell values
             text = None
             texttemplate = None
             textfont = None
@@ -2233,7 +2168,6 @@ class ProjectKit:
                     zmin=zmin, zmax=zmax,
                     coloraxis=coloraxis_name,
                     hovertemplate="<b>%{y}</b> ↔ <b>%{x}</b><br>corr: %{z:.2f}<extra></extra>",
-                    # NEW:
                     text=text,
                     texttemplate=texttemplate,
                     textfont=textfont
@@ -2879,13 +2813,10 @@ class ProjectKit:
         # === 3D branch (biplot only) ===
         if as_3d:
             if kind.lower() == "circle":
-                # Correlation "circle" has no natural 3D analogue that helps readability;
-                # we fall back to a 3D biplot.
                 kind = "biplot"
 
             fig = go.Figure()
 
-            # Countries (scores)
             country_color = "rgba(50, 100, 200, 0.85)"
             ids = df.loc[X.index, id_col] if (id_col in df.columns and show_country_labels) else None
             fig.add_trace(go.Scatter3d(
@@ -2901,7 +2832,6 @@ class ProjectKit:
                 hovertemplate="%{hovertext}<br>PC1: %{x:.2f}<br>PC2: %{y:.2f}<br>PC3: %{z:.2f}<extra></extra>"
             ))
 
-            # Scale variable arrows relative to score spread
             score_rng = np.max(np.ptp(scores[:, :3], axis=0)) or 1.0
             load_rng  = np.max(np.ptp(loadings[:, :3], axis=0)) or 1.0
             arrow_scale = 0.35 * (score_rng / load_rng)
@@ -2910,14 +2840,12 @@ class ProjectKit:
             for i, col in enumerate(sdg_cols):
                 x1, y1, z1 = float(arr[i, 0]), float(arr[i, 1]), float(arr[i, 2])
                 c = var_colors[i]
-                # arrow shaft
                 fig.add_trace(go.Scatter3d(
                     x=[0, x1], y=[0, y1], z=[0, z1],
                     mode="lines",
                     line=dict(width=line_width, color=c),
                     showlegend=False, hoverinfo="skip"
                 ))
-                # label at tip
                 if show_var_labels:
                     lab = col.replace("_Score", "").replace("Goal_", "SDG ")
                     fig.add_trace(go.Scatter3d(
@@ -2927,7 +2855,6 @@ class ProjectKit:
                         textfont=dict(size=label_font_size, color=c)
                     ))
 
-            # Optional legend swatches for groups (same trick you used in 2D)
             if color_by_group:
                 for g, colr in group_color.items():
                     fig.add_trace(go.Scatter3d(
@@ -2947,7 +2874,6 @@ class ProjectKit:
                 margin=dict(l=40, r=40, t=60, b=40)
             )
 
-            # Faint Grid
             fig.update_layout(scene=dict(
                 xaxis=dict(gridcolor='rgba(255,255,255,0.35)', gridwidth=1,
                         showbackground=False, zerolinecolor='rgba(255,255,255,0.25)'),
@@ -2957,7 +2883,6 @@ class ProjectKit:
                         showbackground=False, zerolinecolor='rgba(255,255,255,0.25)'),
             ))         
 
-            # Return loadings table with z-column included for 3D
             load_df = pd.DataFrame({
                 "code": sdg_cols,
                 "group": [lu.set_index("code")["group"].to_dict().get(c, "Other") for c in sdg_cols],
@@ -3138,7 +3063,7 @@ class ProjectKit:
         positive_color: str = "red",
         negative_color: str = "#4A90E2",
         template: str = "plotly_dark",
-        fig_scale: int = 900,                    # <- NEW: sets width & height equally
+        fig_scale: int = 900,                    # sets width & height equally
         hide_axes: bool = True,
         title: str | None = None,
         as_3d: bool = False,
@@ -3244,27 +3169,24 @@ class ProjectKit:
 
         names = list(G.nodes())
 
-        # --- scalar for ranking/sizing (shared) ---
         if node_size_mode == "centrality":
-            raw_vals = nx.degree_centrality(G)  # 0..1
-        elif node_size_mode == "strength":      # weighted degree (sum of |edge weight|)
+            raw_vals = nx.degree_centrality(G) 
+        elif node_size_mode == "strength":    
             raw_vals = {
                 n: sum(abs(d.get("weight", 1.0)) for _, _, d in G.edges(n, data=True))
                 for n in G.nodes()
             }
-        else:                                   # "degree" fallback
+        else:                                
             raw_vals = dict(G.degree())
 
         vals = np.array([raw_vals.get(n, 0.0) for n in names], dtype=float)
 
-        # --- scale to marker sizes (shared) ---
         vmin, vmax = float(vals.min()), float(vals.max())
         if vmax > vmin:
             sizes = node_size_min + (vals - vmin) / (vmax - vmin) * (node_size_max - node_size_min)
         else:
             sizes = np.full(len(names), node_size_min, dtype=float)
 
-        # --- node colors by group (shared) ---
         groups_for_nodes = [G.nodes[n].get("group", "Other") for n in names]
         palette = ['#4E79A7','#59A14F','#E15759','#F28E2B','#76B7B2',
                 '#EDC948','#B07AA1','#FF9DA7','#9C755F','#BAB0AC']
@@ -3278,10 +3200,7 @@ class ProjectKit:
         fig.update_layout(template=template, width=fig_scale, height=fig_scale)
 
         if not as_3d:
-            # ---------- 2D (original behavior) ----------
             pos = nx.circular_layout(G)
-
-            # edges (per-edge trace, preserves your varying widths/colors)
             for a, b, r in edges:
                 x0, y0 = pos[a]; x1, y1 = pos[b]
                 fig.add_trace(go.Scatter(
@@ -3297,7 +3216,6 @@ class ProjectKit:
             xs = [pos[n][0] for n in names]
             ys = [pos[n][1] for n in names]
 
-            # labels as before
             if label_strategy == "all":
                 text_vals = names
             elif label_strategy == "none":
@@ -3322,9 +3240,6 @@ class ProjectKit:
                 hoverinfo="text", hovertext=texts, showlegend=False,
             ))
 
-            # Keep your existing title/annotation & hide-axes block:
-            # (unchanged)
-            # ...
             fig.update_xaxes(visible=False, showgrid=False, zeroline=False, constrain="domain")
             fig.update_yaxes(visible=False, showgrid=False, zeroline=False, scaleanchor="x", scaleratio=1)
             if hide_axes:
@@ -3332,7 +3247,6 @@ class ProjectKit:
                 fig.update_yaxes(visible=False, showline=False, ticks="")
 
         else:
-            # ---------- 3D (new behavior) ----------
             if layout_algo_3d == "kamada":
                 try:
                     pos3 = nx.kamada_kawai_layout(G, dim=3, weight="weight")
@@ -3360,7 +3274,6 @@ class ProjectKit:
             ys = [pos3[n][1] for n in names]
             zs = [pos3[n][2] for n in names]
 
-            # label pick logic same as 2D
             if label_strategy == "all":
                 text_vals = names
             elif label_strategy == "none":
@@ -3387,7 +3300,6 @@ class ProjectKit:
                 name="nodes"
             ))
 
-            # Title & helper legend text (kept consistent)
             if title is None:
                 scope = f"{entity_type}={','.join(entities)}" if entity_type and entities else "All entities"
                 when = f"Year {year}" if year is not None else (f"Years {years[0]}–{years[1]}" if years else "All years")
@@ -3439,14 +3351,13 @@ class ProjectKit:
         plot_height=620,
         plot_template="plotly_dark"
     ):
-        # ---- get country row ----
+
         row = df_sdg[(df_sdg["Country"] == country) & (df_sdg["Year"] == year)]
         if row.empty:
             raise ValueError(f"No row in df_sdg for Country='{country}' and Year={year}.")
         row = row.iloc[0]
         country_region = row["Region"]
 
-        # ---- benchmark pool ----
         if region_benchmark:
             pool = df_sdg[(df_sdg["Region"] == country_region) & (df_sdg["Year"] == year)]
             pool_label = country_region                      # <- for title & legend
@@ -3454,7 +3365,6 @@ class ProjectKit:
             pool = df_sdg[df_sdg["Year"] == year]
             pool_label = "all regions"                       # <- for title & legend
 
-        # ---- compute per-goal benchmark ----
         goal_cols = [c for c in df_sdg.columns if str(c).startswith("Goal_")]
         country_vals = row[goal_cols].astype(float)
 
@@ -3478,7 +3388,6 @@ class ProjectKit:
                                 (out["gap_points"] / out["benchmark"]) * 100, np.nan)
         out = out.sort_values("gap_points", ascending=False, kind="mergesort").reset_index(drop=True)
 
-        # ---- figure ----
         fig = go.Figure()
 
         # lines
@@ -3492,7 +3401,6 @@ class ProjectKit:
                 showlegend=False
             ))
 
-        # markers
         fig.add_trace(go.Scatter(
             x=out["country_score"], y=out["goal_label"],
             mode="markers",
@@ -3505,19 +3413,16 @@ class ProjectKit:
             x=out["benchmark"], y=out["goal_label"],
             mode="markers",
             marker=dict(color="#e55353", size=8, symbol="diamond"),
-            # legend shows both the statistic and the pool:
             name=f"{bench_label} ({pool_label})",
             hovertemplate=f"<b>%{{y}}</b><br>{bench_label} ({pool_label}): %{{x:.1f}}<extra></extra>",
         ))
 
-        # axis range (no centering)
         xmin = float(np.nanmin(np.r_[out["country_score"], out["benchmark"]]))
         xmax = float(np.nanmax(np.r_[out["country_score"], out["benchmark"]]))
         pad = max(1.0, 0.05 * (xmax - xmin))
         fig.update_xaxes(range=[xmin - pad, xmax + 9 * pad])
         fig.update_yaxes(autorange="reversed")
 
-        # labels outside right side
         if show_gap_labels:
             span = xmax - xmin
             x_off = label_offset_frac * span
@@ -3532,7 +3437,6 @@ class ProjectKit:
                     borderwidth=1, font=dict(size=12, color="black"), align="left"
                 )
 
-        # title includes region/all-regions choice
         title = (f"{country} {year} — Gap to {bench_label} ({pool_label}) by Goal"
                 f"<br><sup>Labels show gap in points and % of benchmark; ordered by largest shortfall.</sup>")
         fig.update_layout(
@@ -3566,7 +3470,6 @@ class ProjectKit:
     ):
         is_dark = "dark" in str(template).lower()
 
-        # ---------- peers (year/region scope) ----------
         peers = df_sdg.copy()
         if year is not None and "Year" in peers.columns:
             peers = peers[peers["Year"] == year].copy()
@@ -3574,7 +3477,6 @@ class ProjectKit:
             regs = [region_names] if isinstance(region_names, str) else list(region_names)
             peers = peers[peers["Region"].astype(str).isin(regs)].copy()
 
-        # ---------- plotting slice ----------
         df = peers.copy()
         if country_names is not None and "Country" in df.columns:
             ctys = [country_names] if isinstance(country_names, str) else list(country_names)
@@ -3582,7 +3484,6 @@ class ProjectKit:
         if df.empty:
             raise ValueError("No rows left after filters. Check year, region, or country.")
 
-        # ---------- goals & aggregation ----------
         goal_cols = [c for c in df.columns if c.startswith("Goal_")]
         if not goal_cols:
             raise ValueError("No Goal_ columns in df_sdg.")
@@ -3598,7 +3499,6 @@ class ProjectKit:
         goal_cols = list(vals.index)
         sdg_labels = [f"SDG {gnum(c)}" for c in goal_cols]
 
-        # ---------- group colors ----------
         lu = df_lookup[["code", "group"]].drop_duplicates().set_index("code")
         groups_raw = lu.reindex(goal_cols)["group"].fillna("Other")
         groups_key = groups_raw.astype(str).str.lower()
@@ -3612,7 +3512,6 @@ class ProjectKit:
         }
         default_color = "#7f7f7f"
 
-        # ---------- radial bars ----------
         n = len(vals)
         theta = np.linspace(0, 360, n, endpoint=False)
         width = 360.0 / n * 0.9
@@ -3648,7 +3547,6 @@ class ProjectKit:
                 showlegend=False
             ))
 
-        # value labels (overlay text)
         labels = [f"{v:.2f}" if v >= 8 else "" for v in r_all]
         r_text = [max(v * 0.82, 6) for v in r_all]
         fig.add_trace(go.Scatterpolar(
@@ -3658,17 +3556,14 @@ class ProjectKit:
             hoverinfo="skip", showlegend=False
         ))
 
-        # ---------- layout domains ----------
-        # default (no KPI row): radial uses almost full height
+
         polar_domain_x = [0.05, 0.995]
         polar_y = [0.08, 0.94]
 
-        # ---------- KPI row UNDER TITLE — bigger donut, higher labels, darker value text ----------
         show_kpi = bool(country_names) and (len([country_names] if isinstance(country_names, str) else country_names) > 0)
         if show_kpi:
-            # reserve a thin top band and let polar fill full width below
-            top_band = [0.845, 0.980]         # a touch taller than before so donut can grow
-            polar_y  = [0.08, 0.835]          # radial plot below KPI strip
+            top_band = [0.845, 0.980]      
+            polar_y  = [0.08, 0.835]     
         
             cname = country_names if isinstance(country_names, str) else country_names[0]
             row = peers.loc[peers["Country"] == cname]
@@ -3697,26 +3592,23 @@ class ProjectKit:
             tmp["__rank"] = range(1, len(tmp) + 1)
             rank = int(tmp.loc[tmp["Country"] == cname, "__rank"].iloc[0]) if cname in tmp["Country"].values else None
         
-            # ---- layout of KPI row (center-left donut, rank to its right) ----
-            donut_x0, donut_x1 = 0.05, 0.16       # wider → bigger donut
+            donut_x0, donut_x1 = 0.05, 0.16 
             donut_y0, donut_y1 = top_band[0], top_band[1]
             cx, cy = (donut_x0 + donut_x1)/2, (donut_y0 + donut_y1)/2
 
-            ROW_SHIFT = -0.006                 # negative = down a bit; positive = up
+            ROW_SHIFT = -0.006            
             donut_y0 += ROW_SHIFT
             donut_y1 += ROW_SHIFT
             cy = (donut_y0 + donut_y1) / 2 
 
-            hole_size = 0.72                      # slightly thicker ring (0.70–0.76 is fine)
+            hole_size = 0.72           
         
-            # keep values at the exact center of their blocks
-            LABEL_PAD = 0.100                 # ↑ move the label bars farther above
+            LABEL_PAD = 0.100           
             ylab     = min(donut_y1 + LABEL_PAD, kpi_pad)
 
-            score_y  = cy                     # value stays centered in the donut
-            rank_y   = cy                     # rank value stays centered in its row
+            score_y  = cy      
+            rank_y   = cy     
         
-            # contrast-aware value color (dark on white, white on dark)
             value_color = "#4789C8"
         
             # --- Donut ---
@@ -3730,13 +3622,11 @@ class ProjectKit:
                             showarrow=False, xanchor="center",
                             font=dict(size=13, color="white"),
                             bgcolor="#29499C", borderpad=6)
-            # value centered inside donut
             fig.add_annotation(x=cx, y=score_y, text=f"{score:.1f}",
                             showarrow=False, xanchor="center", yanchor="middle",
                             font=dict(size=32, color=value_color))
         
-            # --- Country Rank (to the right) ---
-            rx = donut_x1 + 0.035                  # a bit more gap from the larger donut
+            rx = donut_x1 + 0.035       
             fig.add_annotation(x=rx, y=ylab, text="Country Rank",
                             showarrow=False, font=dict(size=13, color="white"),
                             bgcolor="#29499C", borderpad=6, xanchor="left")
@@ -3746,7 +3636,6 @@ class ProjectKit:
                             font=dict(size=24, color=value_color))
 
 
-        # ---------- title text ----------
         parts = []
         if year is not None: parts.append(f"Year {year}")
         if region_names is None: parts.append("All regions")
@@ -3756,7 +3645,6 @@ class ProjectKit:
         if country_names is not None:
             parts.append("Country " + (country_names if isinstance(country_names, str) else ", ".join(country_names)))
 
-        # ---------- layout ----------
         fig.update_layout(
             template=template,
             height=fig_height,
@@ -3799,7 +3687,6 @@ class ProjectKit:
 
     # ---------- lookups ----------
     def _goal_codes(self, df_lookup: pd.DataFrame):
-        """Return sorted ['Goal_1', ..., 'Goal_17'] found in df_lookup['code']."""
         s = (df_lookup.get("code", pd.Series(dtype=str))
             .dropna().astype(str))
         s = s[s.str.match(r"^Goal_\d{1,2}$")]
@@ -3807,10 +3694,6 @@ class ProjectKit:
         return codes
 
     def _groups_map(self, df_lookup: pd.DataFrame):
-        """
-        Return dict: group_name(lowercase) -> sorted list of Goal_* codes.
-        Expects columns ['code','group'].
-        """
         if "group" not in df_lookup or "code" not in df_lookup:
             return {}
         look = df_lookup.dropna(subset=["group", "code"]).copy()
@@ -3831,26 +3714,17 @@ class ProjectKit:
 
     # ---------- value access ---------- 
     def _fallback_goal_value(self, row: pd.Series, base_code: str):
-        """
-        Get a goal value from a row with fallbacks:
-        Goal_k -> Score_reg_Goal_k -> Goal_k_Score_reg
-        """
         v = pd.to_numeric(row.get(base_code), errors="coerce")
         if pd.isna(v): v = pd.to_numeric(row.get(f"Score_reg_{base_code}"), errors="coerce")
         if pd.isna(v): v = pd.to_numeric(row.get(f"{base_code}_Score_reg"), errors="coerce")
         return v
 
     def _safe_nanmean(self, seq):
-        """nanmean that returns np.nan for empty/all-nan sequences."""
         arr = [x for x in seq if pd.notna(x)]
         return np.nan if len(arr) == 0 else float(np.nanmean(arr))
 
     # ---------- sdg argument normalization ----------
     def _normalize_sdg_arg(self, sdg):
-        """
-        Accepts: 12, '12', 'Goal_12', 'sdg_12', ['Goal_3','sdg_6', 7]
-        Returns: ['Goal_3','Goal_6','Goal_7'] (sorted & de-duplicated)
-        """
         if sdg is None:
             return None
         items = sdg if isinstance(sdg, (list, tuple, set, np.ndarray, pd.Series)) else [sdg]
@@ -3872,10 +3746,9 @@ class ProjectKit:
     def _forecast_one_series(self, y_yearly: pd.Series, h: int, last_hist_year: int) -> pd.DataFrame:
         y = y_yearly.dropna().astype(float).sort_index()
 
-        # ---- fallback when too short or empty ----
         if len(y) < 3 or h <= 0:
-            last = float(y.iloc[-1]) if len(y) else 50.0  # flat fallback level
-            start = last_hist_year + 1                    # <-- use global last hist year
+            last = float(y.iloc[-1]) if len(y) else 50.0  
+            start = last_hist_year + 1                
             years = np.arange(start, start + h)
             yhat = np.repeat(last, h)
             return pd.DataFrame({
@@ -3884,7 +3757,6 @@ class ProjectKit:
                 "lo95": yhat - 12.0, "hi95": yhat + 12.0
             })
 
-        # ---- normal ETS path ----
         def logit01(v):
             v = np.clip(v, 1e-6, 100 - 1e-6) / 100.0
             return np.log(v / (1 - v))
@@ -3897,7 +3769,6 @@ class ProjectKit:
         model = ExponentialSmoothing(z, trend="add", damped_trend=True, seasonal=None)
         fit   = model.fit(optimized=True, use_brute=False)
 
-        # if y had points, use its max year; otherwise fall back to dataset’s last year
         last_year = int(y.index.max()) if len(y) else int(last_hist_year)
         years = np.arange(last_year + 1, last_year + 1 + h)
 
@@ -3916,7 +3787,6 @@ class ProjectKit:
             "hi95": inv_logit01(z_hi95),
         })
 
-    # ---------- main entry (simplified API) ----------
     def forecast_sdg_any(
         self,
         df_sdg: pd.DataFrame,
@@ -3930,17 +3800,12 @@ class ProjectKit:
         horizon_to: int = 2030,
         agg_rule: str = "mean",        # placeholder for weighted means (future)
     ) -> pd.DataFrame:
-        """
-        Returns a tidy DataFrame with columns:
-        ['geo_level','geo','target_level','target','year','yhat','lo80','hi80','lo95','hi95']
-        """
 
-        # ----- lookups -----
-        all_goals = self._goal_codes(df_lookup)             # Goal_1..Goal_17 found in lookup
-        group_map = self._groups_map(df_lookup)             # {'environmental': [...], ...}
+
+        all_goals = self._goal_codes(df_lookup)        
+        group_map = self._groups_map(df_lookup)           
         _, regions = self._country_region_lists(df_sdg)
 
-        # ----- target selection (precedence: group > overall > sdg(s)) -----
         if group is not None:
             target_level = "group"
             T = group if isinstance(group, (list, tuple)) else [group]
@@ -3951,14 +3816,13 @@ class ProjectKit:
 
         elif overall:
             target_level = "overall"
-            T = ["overall"]  # mean of all goals
+            T = ["overall"] 
 
         else:
             target_level = "goal"
-            norm = self._normalize_sdg_arg(sdg)  # None → all goals
+            norm = self._normalize_sdg_arg(sdg)  
             T = all_goals if norm is None else norm
 
-        # ----- geography selection -----
         gl = entity_level.strip().lower()
         if gl == "region":
             G = regions if entities is None else (entities if isinstance(entities, (list, tuple)) else [entities])
@@ -3969,7 +3833,6 @@ class ProjectKit:
         else:
             raise ValueError("entity_level must be 'country' or 'region'")
 
-        # ----- builder for a (geo, target) history series -----
         def hist_series(geo: str, tgt: str) -> pd.Series:
             if gl == "country":
                 sub = df_sdg[df_sdg["Country"] == geo]
@@ -3979,7 +3842,7 @@ class ProjectKit:
                     frame = sub.loc[sub["Year"] == y]
                     if frame.empty:
                         rows.append((y, np.nan)); continue
-                    row = frame.iloc[0]  # 1 row per country-year
+                    row = frame.iloc[0] 
                     if target_level == "goal":
                         v = self._fallback_goal_value(row, tgt)
                     elif target_level == "group":
@@ -3990,7 +3853,7 @@ class ProjectKit:
                     rows.append((y, v))
                 return pd.Series({y: v for y, v in rows})
 
-            else:  # region
+            else: 
                 sub = df_sdg[df_sdg["Region"] == geo]
                 years = sorted(sub["Year"].dropna().unique().tolist())
                 vals_by_year = []
@@ -4010,7 +3873,6 @@ class ProjectKit:
                     vals_by_year.append((y, self._safe_nanmean(per_cty)))
                 return pd.Series({y: v for y, v in vals_by_year})
 
-        # ----- forecast loop -----
         out = []
         last_hist_year = int(df_sdg["Year"].max())
         h = max(0, int(horizon_to) - last_hist_year)
@@ -4050,11 +3912,10 @@ class ProjectKit:
         connect_gap: bool = True,
         fig_height: int=650,
         as_3d: bool = False,
-        ribbon_halfwidth: float = 0.30,      # thickness of the PI “ribbon” on Y
+        ribbon_halfwidth: float = 0.30,   
         marker_size_3d: int = 3,
         grid_color_3d: str = "#808080",        
     ) -> go.Figure:
-        # -------- choose series ----------
         pairs = fc_df[["geo_level", "geo", "target_level", "target"]].drop_duplicates()
         if geo is None:
             if pairs["geo"].nunique() != 1:
@@ -4073,7 +3934,6 @@ class ProjectKit:
         gl = fc_sel["geo_level"].iloc[0]
         tl = fc_sel["target_level"].iloc[0]
 
-        # -------- build historical identical to your aggregation ----------
         all_goals = self._goal_codes(df_lookup)
         group_map = self._groups_map(df_lookup)
 
@@ -4122,15 +3982,12 @@ class ProjectKit:
         hist = hist.dropna().sort_index()
         x_hist, y_hist = hist.index.to_list(), hist.values.tolist()
 
-        # -------- figure ----------
         fig = go.Figure()
 
-        # ----------------- 3D branch -----------------
         if as_3d:
 
             fig = go.Figure()
 
-            # Actuals (Y=0 lane)
             last_hist_year = None
             last_hist_val  = None
             if len(x_hist) > 0:
@@ -4142,7 +3999,6 @@ class ProjectKit:
                 last_hist_year = int(max(x_hist))
                 last_hist_val  = float(y_hist[-1])
 
-            # Forecast arrays
             x_fc  = fc_sel["year"].astype(int).to_list()
             yhat  = fc_sel["yhat"].astype(float).to_numpy()
             lo80  = fc_sel["lo80"].astype(float).to_numpy()
@@ -4150,7 +4006,6 @@ class ProjectKit:
             lo95  = fc_sel["lo95"].astype(float).to_numpy()
             hi95  = fc_sel["hi95"].astype(float).to_numpy()
 
-            # Prediction-interval ribbons as translucent surfaces
             y_band = [-ribbon_halfwidth, ribbon_halfwidth]
             if show_pi95:
                 z95 = np.vstack([lo95, hi95])
@@ -4165,7 +4020,6 @@ class ProjectKit:
                     opacity=0.28, name="80% PI"
                 ))
 
-            # Forecast mean on the Y=0 lane
             fig.add_trace(go.Scatter3d(
                 x=x_fc, y=[0]*len(x_fc), z=yhat,
                 mode="lines+markers", name="Forecast",
@@ -4173,7 +4027,6 @@ class ProjectKit:
                 marker=dict(size=marker_size_3d)
             ))
 
-            # Connector from last actual to first forecast
             if connect_gap and last_hist_year is not None and len(x_fc) > 0:
                 fig.add_trace(go.Scatter3d(
                     x=[last_hist_year, x_fc[0]], y=[0, 0], z=[last_hist_val, float(yhat[0])],
@@ -4181,7 +4034,6 @@ class ProjectKit:
                     showlegend=False
                 ))
 
-            # Auto Z range from all actuals + forecast columns (respect bounds)
             all_vals = []
             if y_hist: all_vals.extend(y_hist)
             all_vals.extend(fc_sel[["yhat","lo80","hi80","lo95","hi95"]].to_numpy().ravel().tolist())
@@ -4196,7 +4048,6 @@ class ProjectKit:
                 if clip_to_bounds:
                     z0, z1 = max(0.0, z0), min(100.0, z1)
 
-            # Title label (Goal/Group/Overall) like your 2D code
             if tl == "goal":
                 tlabel = f"SDG {int(str(target).split('_')[-1])}"
             elif tl == "group":
@@ -4205,7 +4056,6 @@ class ProjectKit:
                 tlabel = "Overall"
             ttl = title or f"{tlabel} • {gl.title()}: {geo}"
 
-            # Determine min/max year across actuals + forecast for a sane X range
             years_all = []
             if len(x_hist) > 0: years_all.extend(x_hist)
             years_all.extend(x_fc)
@@ -4238,7 +4088,6 @@ class ProjectKit:
                 ),
             )
 
-            # Optional vertical “history ends” line in 3D
             if show_boundary and last_hist_year is not None:
                 fig.add_trace(go.Scatter3d(
                     x=[last_hist_year, last_hist_year],
@@ -4249,9 +4098,7 @@ class ProjectKit:
                 ))
 
             return fig
-        # --------------- end 3D branch ---------------
 
-        # Actuals
         last_hist_year = None
         last_hist_val  = None
         if len(x_hist) > 0:
@@ -4260,7 +4107,6 @@ class ProjectKit:
             last_hist_year = int(max(x_hist))
             last_hist_val  = float(y_hist[-1])
 
-        # Bands & forecast
         x_fc = fc_sel["year"].astype(int)
         if show_pi95:
             fig.add_trace(go.Scatter(
@@ -4277,13 +4123,11 @@ class ProjectKit:
                 hoverinfo="skip", name="80% PI"
             ))
 
-        # Forecast mean
         fig.add_trace(go.Scatter(
             x=fc_sel["year"], y=fc_sel["yhat"], mode="lines+markers",
             name="Forecast", line=dict(width=2, dash="dash"), marker=dict(size=6)
         ))
 
-        # NEW: connector from last actual to first forecast point
         if connect_gap and last_hist_year is not None and len(fc_sel) > 0:
             first_fc_year = int(fc_sel["year"].iloc[0])
             first_fc_yhat = float(fc_sel["yhat"].iloc[0])
@@ -4295,11 +4139,9 @@ class ProjectKit:
                 showlegend=False, hoverinfo="skip"
             ))
 
-        # Vertical boundary
         if show_boundary and last_hist_year is not None:
             fig.add_vline(x=last_hist_year, line_width=1, line_dash="dot", line_color="gray")
 
-        # -------- AUTO Y-RANGE from data (actuals + all forecast columns) ----------
         vals = []
         if y_hist: vals.extend(y_hist)
         vals.extend(fc_sel[["yhat", "lo80", "hi80", "lo95", "hi95"]].to_numpy().ravel().tolist())
@@ -4315,7 +4157,6 @@ class ProjectKit:
             if clip_to_bounds:
                 y0, y1 = max(0.0, y0), min(100.0, y1)
 
-        # Title & axes
         if tl == "goal":
             tlabel = f"SDG {int(str(target).split('_')[-1])}"
         elif tl == "group":
@@ -4324,8 +4165,7 @@ class ProjectKit:
             tlabel = "Overall"
 
         ttl = title or f"{tlabel} • {gl.title()}: {geo}"
-        # Set 5-year ticks aligned to the nearest multiple of 5
-        # Determine the min year across actuals + forecast
+
         years_all = []
         if len(x_hist) > 0: years_all.extend(x_hist)
         years_all.extend(fc_sel["year"].tolist())
