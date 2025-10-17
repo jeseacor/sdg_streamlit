@@ -311,8 +311,6 @@ class ProjectKit:
         max_num_cols: int = 8,
         max_cat_cols: int = 8,
     ) -> dict:
-        """Small, token-friendly snapshot of a DataFrame for LLM analysis."""
-        import numpy as np
 
         prof: dict = {}
         prof["shape"] = [int(df.shape[0]), int(df.shape[1])]
@@ -350,7 +348,6 @@ class ProjectKit:
         if cat_info:
             prof["categorical_summary"] = cat_info
 
-        # small head sample (stringified to be safe)
         prof["sample_head"] = df.head(max_rows).astype(str).to_dict(orient="records")
         return prof
 
@@ -390,7 +387,6 @@ class ProjectKit:
         context_hdr = f"{heading}\n"
 
         if fig is not None:
-            # Keep your current image flow
             data_url = self.plotly_fig_to_data_url(fig=fig)
             prompt = (
                 "You are the insights writer for an SDG analytics app. You will receive a chart "
@@ -408,7 +404,6 @@ class ProjectKit:
             ]
 
         else:
-            # DataFrame mode → compact profile to keep tokens small
             profile = self._df_compact_profile(df)
             prompt = (
                 "You will receive a compact JSON profile of a dataset. Write:\n"
@@ -453,7 +448,6 @@ class ProjectKit:
         self._chat_dynamic = ""
         self._retrieval_docs = []
 
-        # Basic profile
         years = sorted(pd.to_numeric(df_sdg["Year"], errors="coerce").dropna().unique().astype(int))
         goals = [c for c in df_sdg.columns if c.startswith("Goal_")]
         sdg_codes = [c for c in df_sdg.columns if c.lower().startswith("sdg")]
@@ -472,7 +466,6 @@ class ProjectKit:
             "Scores generally 0–100 (higher is better unless noted). Correlation ≠ causation.\n"
         )
 
-        # Tiny keyword retriever from df_lookup (code / group / description)
         if {"code", "group", "description"} <= set(df_lookup.columns):
             for _, r in df_lookup[["code", "group", "description"]].dropna().iterrows():
                 self._retrieval_docs.append(f"{r['code']} ({r['group']}): {r['description']}")
@@ -496,7 +489,6 @@ class ProjectKit:
         h = hashlib.sha256()
         if fig is not None:
             j = fig.to_plotly_json()
-            # prune: keep only elements that define the view identity
             pruned = {
                 "layout_title": j.get("layout", {}).get("title", {}).get("text"),
                 "series": [t.get("name") for t in j.get("data", [])[:30]],
@@ -524,7 +516,6 @@ class ProjectKit:
 
         fp = self._view_fingerprint(fig=fig, df=df)
         if getattr(self, "_chat_view_fp", None) == fp:
-            # Same view; just refresh the CURRENT VIEW title text and return
             if title is None and fig is not None:
                 try: title = fig.layout.title.text or "Current view"
                 except Exception: title = "Current view"
@@ -541,7 +532,6 @@ class ProjectKit:
         if title is None:
             title = "Current view"
 
-        # 2) Build a tiny, helpful text context (also tells you if it saw a table)
         parts = []
         if df is not None and hasattr(df, "shape"):
             try:
@@ -568,7 +558,6 @@ class ProjectKit:
         info_line = " • ".join(parts) if parts else "—"
         self._chat_dynamic = f"CURRENT VIEW\nTitle: {title}\nInfo: {info_line}\n"
 
-        # 3) Attach lightweight payloads for the chat call
         self._chat_view = {}
         # figure snapshot
         if fig is not None:
@@ -612,7 +601,6 @@ class ProjectKit:
         lines.append(f"User: {prompt}")
         packed = f"{context}\n\nConversation so far:\n" + "\n".join(lines)
 
-        # NEW: include view payload (image/profile) if present
         content = [{"type": "input_text", "text": packed}]
         view = getattr(self, "_chat_view", None)
         if view:
@@ -726,7 +714,6 @@ class ProjectKit:
         if df_year.empty:
             raise ValueError(f"No rows for Year {year}")
 
-        # optional geo filter
         scope_note = ""
         if geo_level is None:
             df_scope = df_year
@@ -738,7 +725,6 @@ class ProjectKit:
                 raise ValueError(f"Column '{col}' not found in df_sdg")
 
             if geo_names is None or (isinstance(geo_names, (list, tuple, set)) and len(geo_names) == 0):
-                # select all rows for the chosen level
                 df_scope = df_year[df_year[col].notna()]
                 scope_note = f" • {col}s: all"
             else:
@@ -751,7 +737,6 @@ class ProjectKit:
 
         df_year = df_scope
 
-        # choose value columns and base title
         if rank_by.lower() == "goal":
             value_cols = [c for c in df_year.columns if c.startswith("Goal_")]
             chart_title = f"Ranking of SDG Goals • Year {year}"
@@ -767,11 +752,9 @@ class ProjectKit:
         if not value_cols:
             raise ValueError("No matching columns found for the selected mode.")
 
-        # average across the selected geo scope
         means = df_year[value_cols].mean(numeric_only=True).reset_index()
         means.columns = ["code", "value"]
 
-        # attach metadata
         meta = df_lookup[["code", "description", "group", "sdg"]].copy()
         merged = means.merge(meta, on="code", how="left")
 
@@ -789,7 +772,6 @@ class ProjectKit:
         if merged.empty:
             raise ValueError("No data left after filtering. Check your filters.")
 
-        # shape final output
         if rank_by.lower() == "group":
             out = (
                 merged.groupby("group", as_index=False)
@@ -808,7 +790,6 @@ class ProjectKit:
 
         out = out.sort_values("value", ascending=ascending)
 
-        # title with scope note
         chart_title = chart_title + scope_note
 
         fig = px.bar(
@@ -837,7 +818,7 @@ class ProjectKit:
         self,
         data: pd.DataFrame,
         value_col: str | None = None,        # None => Overall Score
-        group_col: str | None = "Country",   # NEW: None => treat as "Country" across all regions
+        group_col: str | None = "Country",   # None => treat as "Country" across all regions
         top_n: int = 5,
         ascending: bool = False,
         year: int | None = None,
@@ -855,7 +836,6 @@ class ProjectKit:
         if year is not None:
             d = d[d["Year"] == year]
 
-        # dynamic groups from df_lookup (unchanged from your version)
         groups_lower: set[str] = set()
         group_label_map: dict[str, str] = {}
         if df_lookup is not None and "group" in df_lookup.columns:
@@ -863,7 +843,6 @@ class ProjectKit:
             groups_lower = set(_groups.str.lower().unique())
             group_label_map = {g.lower(): g for g in _groups.unique()}
 
-        # value selection (unchanged semantics)
         if value_col is None:
             goal_cols = [c for c in d.columns if c.startswith("Goal_")]
             if not goal_cols:
@@ -890,12 +869,9 @@ class ProjectKit:
                 value_key = "__group_metric__"
                 label_for_x = group_label_map.get(val_lower, value_col.title())
 
-        # ---------------------------
-        # NEW: dimension + filtering
-        # ---------------------------
+
         effective_group = "Country" if group_col is None else str(group_col)
 
-        # if group_col is a literal region name (compat), treat as "countries in that region"
         if effective_group not in {"Country", "Region"}:
             if "Region" not in d.columns:
                 raise ValueError("Region column not found in data.")
@@ -903,7 +879,7 @@ class ProjectKit:
             if d.empty:
                 raise ValueError(f"No rows found for region '{effective_group}'.")
             effective_group = "Country"
-            region_view = None  # already filtered by the name in group_col
+            region_view = None 
 
         if effective_group == "Region":
             if region_view is None:
@@ -912,7 +888,6 @@ class ProjectKit:
                 y_label = "Region"
                 subtitle_extra = None
             else:
-                # filter to chosen regions, then rank countries within
                 regs = [region_view] if isinstance(region_view, str) else list(region_view)
                 if "Region" not in d.columns:
                     raise ValueError("Region column not found in data.")
@@ -929,12 +904,10 @@ class ProjectKit:
             y_label = "Country (Region)" if "Region" in d.columns else "Country"
             subtitle_extra = None
 
-        # If ranking countries and Region exists, show "Country (Region)"
         if effective_group == "Country" and "Region" in d.columns:
             d = d.copy()
             d["Country"] = d["Country"] + " (" + d["Region"] + ")"
 
-        # aggregate
         if aggfunc == "median":
             g = d.groupby(agg_by, as_index=False)[value_key].median()
         elif aggfunc == "max":
@@ -987,7 +960,7 @@ class ProjectKit:
         df_lookup: pd.DataFrame | None = None,
         *,
         year: int | None = None,
-        goal: str | None = None,     # None => Overall; or "Goal_#", "sdg*", or a group name from df_lookup["group"]
+        goal: str | None = None, # None => Overall; or "Goal_#", "sdg*", or a group name from df_lookup["group"]
         agg: str = "mean",
         decimals: int = 2,
         region: str | list[str] = "All Regions",
@@ -995,11 +968,6 @@ class ProjectKit:
         start_year: int | None = None,
         end_year: int | None = None,
     ) -> pd.DataFrame:
-        """
-        Build a ranking table for countries with an optional region filter.
-        Adds a column for percent change from start_year → end_year.
-        If start_year/end_year is None, uses the min/max available years after filtering.
-        """
 
         d = df_sdg.copy()
 
@@ -1020,14 +988,11 @@ class ProjectKit:
                 raise ValueError("Region column not found in df_sdg")
             d = d[d["Region"].isin(regions)]
 
-        # keep a copy across all years (after region filter) for percent-change calc
         d_full = d.copy()
 
-        # Optional single-year slice for the ranking score
         if year is not None:
             d = d[d["Year"] == int(year)]
 
-        # --- derive group names dynamically from df_lookup (unchanged) ---
         group_names_lower: set[str] = set()
         group_label_lookup: dict[str, str] = {}
         if df_lookup is not None and "group" in df_lookup.columns:
@@ -1035,7 +1000,6 @@ class ProjectKit:
             group_names_lower = set(groups_series.str.lower().unique())
             group_label_lookup = {g.lower(): g for g in groups_series.unique()}
 
-        # label helper (unchanged)
         def _score_label_from_goal(g: str | None) -> str:
             if g is None:
                 return "Overall Score"
@@ -1050,32 +1014,20 @@ class ProjectKit:
         score_src_label = _score_label_from_goal(goal)
 
         def _fallback_series(frame: pd.DataFrame, base_col: str) -> pd.Series:
-            """
-            Row-wise: use Goal_*; if NaN/blank, fall back to Score_reg_Goal_*,
-            then (for backward compatibility) Goal_*_Score_reg.
-            """
             if base_col in frame.columns:
                 s = pd.to_numeric(frame[base_col], errors="coerce")
             else:
                 s = pd.Series(np.nan, index=frame.index, dtype="float64")
 
-            # NEW name first
-            alt1 = f"Score_reg_{base_col}"      # e.g., Score_reg_Goal_7
+            alt1 = f"Score_reg_{base_col}"
             if alt1 in frame.columns:
                 s = s.fillna(pd.to_numeric(frame[alt1], errors="coerce"))
 
             return s
 
 
-        # metric helper (Overall / Goal_# / group / explicit column)
         def _metric(frame: pd.DataFrame) -> pd.Series:
-            """
-            Compute metric for Overall / Goal_# / group / explicit column,
-            using fallbacks to Score_reg_Goal_* (and Goal_*_Score_reg).
-            """
-            # OVERALL = mean across Goal_1..Goal_17 (with fallback)
             if goal is None or str(goal).strip().lower() in {"overall", "overall score", "overall scores"}:
-                # collect bases even if only the fallback columns exist
                 bases = set()
                 for c in frame.columns:
                     m = re.fullmatch(r"(Goal_\d+)$", c)
@@ -1093,7 +1045,6 @@ class ProjectKit:
             g = str(goal).strip()
             gl = g.lower()
 
-            # GROUP = average of that group's Goal_# codes (with fallback)
             if gl in group_names_lower:
                 if df_lookup is None or not {"group", "code"}.issubset(df_lookup.columns):
                     raise ValueError("df_lookup with 'group' and 'code' columns is required when goal is a group name.")
@@ -1107,22 +1058,17 @@ class ProjectKit:
                 mat = pd.concat([_fallback_series(frame, b) for b in bases], axis=1)
                 return mat.mean(axis=1, skipna=True)
 
-            # SINGLE GOAL = Goal_# (with fallback)
             if re.fullmatch(r"Goal_\d+", g):
                 return _fallback_series(frame, g)
 
-            # Any other explicit column: original behavior
             if g not in frame.columns:
                 raise ValueError(f"Column not found: {g}")
             return pd.to_numeric(frame[g], errors="coerce")
 
-
-        # --- SCORE (original logic) ---
         score = _metric(d)
         out = d[["Country", "Region"]].copy()
         out["Score"] = score
 
-        # aggregate across rows per entity if year not fixed (unchanged)
         if year is None:
             if agg == "median":
                 out = out.groupby(["Country", "Region"], as_index=False)["Score"].median()
@@ -1133,13 +1079,12 @@ class ProjectKit:
             else:
                 out = out.groupby(["Country", "Region"], as_index=False)["Score"].mean()
 
-        # --- PERCENT CHANGE (start_year → end_year) ---
+
         df_m = d_full[["Country", "Region", "Year"]].copy()
         df_m["Metric"] = _metric(d_full)
         df_m = df_m.dropna(subset=["Metric"])
 
         if not df_m.empty:
-            # Resolve default window if not provided (AFTER region filter)
             min_year = int(df_m["Year"].min())
             max_year = int(df_m["Year"].max())
             sy = min_year if start_year is None else int(start_year)
@@ -1147,7 +1092,6 @@ class ProjectKit:
             if sy > ey:
                 sy, ey = ey, sy  # swap if out of order
 
-            # Filter to exact endpoints and compute change; drop entities missing either endpoint
             ds = (
                 df_m[df_m["Year"] == sy]
                 .groupby(["Country", "Region"], as_index=False)["Metric"]
@@ -1169,7 +1113,6 @@ class ProjectKit:
             pct_col_name = f"Percent Change ({start_year}→{end_year}; {score_src_label})"
             pct = pd.DataFrame(columns=["Country", "Region", pct_col_name])
 
-        # --- order, rank, round, label columns ---
         out = (
             out.dropna(subset=["Score"])
             .sort_values("Score", ascending=False)
@@ -1177,7 +1120,6 @@ class ProjectKit:
         )
         out["Score"] = out["Score"].round(decimals)
 
-        # add percent change column
         out = out.merge(pct, on=["Country", "Region"], how="left")
         if pct_col_name in out.columns:
             out[pct_col_name] = out[pct_col_name].round(decimals)
@@ -1260,7 +1202,6 @@ class ProjectKit:
         if not codes:
             raise ValueError("No matching columns found in df_sdg for the given inputs (mode, groups, items).")
 
-        # --- filter by entities first ---
         df = df_sdg.copy()
         scope_txt = ""
         if entity_type and entities:
@@ -1270,7 +1211,6 @@ class ProjectKit:
                 raise ValueError("No rows after entity filtering.")
             scope_txt = f" • {entity_type}: {', '.join(ents[:6])}" + (" …" if len(ents) > 6 else "")
 
-        # --- long form & aggregation ---
         df_long = df[["Year"] + codes].melt("Year", var_name="code", value_name="value")
 
         if agg == "median":
@@ -1278,7 +1218,6 @@ class ProjectKit:
         else:
             df_plot = df_long.groupby(["Year", "code"], as_index=False)["value"].mean()
 
-        # --- resolve year window defaults (AFTER filters) and apply ---
         if df_plot["Year"].empty:
             raise ValueError("No Year values available after filtering.")
 
@@ -1294,7 +1233,6 @@ class ProjectKit:
         if df_plot.empty:
             raise ValueError("No data in the selected year window.")
 
-        # --- labels & title ---
         df_plot = df_plot.merge(look, on="code", how="left")
         df_plot["label"] = df_plot["code"] + " (" + df_plot["group"].str.capitalize().fillna("") + ")"
 
@@ -1311,7 +1249,6 @@ class ProjectKit:
         )
 
         if not as_3d:
-            # ----- 2D (existing behavior) -----
             fig = px.line(
                 df_plot, x="Year", y="value", color="label", markers=True,
                 template=template, title=title,
@@ -1330,7 +1267,7 @@ class ProjectKit:
             )
             return fig
 
-        # ----- 3D (new) -----
+        # ----- 3D -----
         labels = sorted(df_plot["label"].dropna().unique().tolist())
         lane_map = {lab: i for i, lab in enumerate(labels)}
         df_plot = df_plot.copy()
@@ -1339,11 +1276,10 @@ class ProjectKit:
         fig = go.Figure()
         for lab in labels:
             d = df_plot[df_plot["label"] == lab].sort_values("Year")
-            # optional text labels on every point (can be toggled)
             trace_mode = "lines+markers" + ("+text" if show_point_labels_3d else "")
             fig.add_trace(go.Scatter3d(
                 x=d["Year"].astype(float),
-                y=[lane_map[lab]] * len(d),            # each series on its own “lane”
+                y=[lane_map[lab]] * len(d),         
                 z=d["value"].astype(float),
                 mode=trace_mode,
                 name=lab,
@@ -1353,7 +1289,7 @@ class ProjectKit:
                 hovertemplate="Series: %{fullData.name}<br>Year=%{x}<br>Score=%{z:.2f}<extra></extra>",
             ))
 
-        grid_gray = "#808080"  # visible on dark and light themes
+        grid_gray = "#808080" 
         fig.update_layout(
             title=title,
             height=p_height,
@@ -1403,11 +1339,10 @@ class ProjectKit:
 
         # choose how to rank which lines to keep/order
         metric_mode: str = "score",            # "score" | "percent_change"
-        start_year: int | None = None,         # NOW: also sets display window in all modes
-        end_year: int | None = None,           # NOW: also sets display window in all modes
+        start_year: int | None = None,
+        end_year: int | None = None,
     ):
 
-        # --- resolve the series to plot (Overall vs Goal_#) ---
         df = df_sdg.copy()
         is_overall = (goal is None) or (isinstance(goal, str) and goal.strip().lower() == "overall score")
         goal_cols = [c for c in df.columns if isinstance(c, str) and c.startswith("Goal_")]
@@ -1426,11 +1361,9 @@ class ProjectKit:
             if target_col not in df.columns:
                 raise ValueError(f"{goal_label} is not a valid column (looked for '{target_col}')")
 
-        # --- determine entity dimension & filter (incl. Region→countries view) ---
         plot_entity_col = entity_type  # "Country" or "Region"
         selected_regions_for_countries = None
 
-        # normalize entities
         if entities is None:
             entities_list = df[entity_type].dropna().unique().tolist()
         elif isinstance(entities, str):
@@ -1458,7 +1391,6 @@ class ProjectKit:
             if df.empty:
                 raise ValueError("No rows found for the given entities and entity_type")
 
-        # --- metadata for title/sub ---
         if is_overall:
             goal_group, goal_desc = "All Goals", "Mean of Goal_1 … Goal_17 per row"
         else:
@@ -1469,7 +1401,6 @@ class ProjectKit:
                 goal_group = meta["group"].iloc[0]
                 goal_desc  = meta["description"].iloc[0]
 
-        # --- aggregate to (Year, Entity) and build base plot frame ---
         group_keys = ["Year", plot_entity_col]
         if agg == "median":
             df_plot = df.groupby(group_keys, as_index=False)[target_col].median()
@@ -1477,23 +1408,21 @@ class ProjectKit:
             df_plot = df.groupby(group_keys, as_index=False)[target_col].mean()
         df_plot.rename(columns={target_col: "value", plot_entity_col: "Entity"}, inplace=True)
 
-        # --- resolve display window (applies to ALL modes) ---
         y_min_avail = int(df_plot["Year"].min())
         y_max_avail = int(df_plot["Year"].max())
         y0 = y_min_avail if start_year is None else int(start_year)
         y1 = y_max_avail if end_year   is None else int(end_year)
         if y0 > y1:
-            y0, y1 = y1, y0  # swap if user passed reversed bounds
-        # filter to window
+            y0, y1 = y1, y0 
+
         df_plot = df_plot[(df_plot["Year"] >= y0) & (df_plot["Year"] <= y1)].copy()
         if df_plot.empty:
             raise ValueError("No data in the selected year window.")
 
-        # window bounds after filtering (in case some years are missing)
+
         win_min = int(df_plot["Year"].min())
         win_max = int(df_plot["Year"].max())
 
-        # --- decide ranking year(s)/window based on metric_mode ---
         mm = (metric_mode or "score").strip().lower()
         if mm == "percent_change":
             sy, ey = win_min, win_max  # rank by Δ across the displayed window
@@ -1504,17 +1433,14 @@ class ProjectKit:
             rank_df = s.merge(e, on="Entity", how="inner")
             rank_df["rank_metric"] = (rank_df["end"] - rank_df["start"]) / rank_df["start"].replace(0, np.nan) * 100.0
         else:
-            # score mode → rank at a year inside the window (default = window end)
             ey = int(win_max if rank_year is None else max(win_min, min(int(rank_year), win_max)))
             rank_basis_text = f"ranked by score in {ey}"
             rank_df = df_plot[df_plot["Year"] == ey][["Entity", "value"]].rename(columns={"value": "rank_metric"})
 
-        # ensure we have something to rank
         rank_df = rank_df.dropna(subset=["rank_metric"])
         if rank_df.empty:
             raise ValueError("No data available for ranking with the selected mode/years.")
 
-        # --- choose entities to display & legend order ---
         asc = (top_mode or "top").strip().lower() == "bottom"
         if top_n is not None and top_n > 0:
             sel = rank_df.sort_values("rank_metric", ascending=asc).head(top_n)
