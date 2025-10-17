@@ -8,7 +8,6 @@ from pathlib import Path
 from streamlit_option_menu import option_menu
 import plotly.io as pio
 
-# ---- New API (plotly.io.defaults.*) ----
 try:
     pio.defaults.width  = 900
     pio.defaults.height = 600
@@ -17,7 +16,7 @@ try:
 except Exception:
     pass
 
-# ---- Legacy API (kaleido.scope.*) for older combos ----
+
 try:
     sc = pio.kaleido.scope
     if hasattr(sc, "default_width"):  sc.default_width  = 900
@@ -78,7 +77,6 @@ def load_insight(page_key: str, fig=None, *, df=None, tag: str | None = None) ->
     return store.get(_insight_key(page_key, fig=fig, df=df, tag=tag))
 
 def save_insight(page_key: str, fig, text: str, *, df=None, tag: str | None = None) -> None:
-    # keeps your existing (page_key, fig, text) signature working
     store = _insights_store()
     store[_insight_key(page_key, fig=fig, df=df, tag=tag)] = text
 
@@ -97,7 +95,6 @@ def linked_image_local(img_path: str, url: str, *, width: int | None = None,
     b64 = b64encode(data).decode("utf-8")
     ext = (Path(img_path).suffix or ".png").lstrip(".")
 
-    # inner box width; if a width is given we’ll center that box, otherwise it can grow to 100%
     box_w = f"width:{width}px;" if width else "max-width:100%;"
     rcss = f"{int(radius)}px" if isinstance(radius, (int, float)) else str(radius)
     scss = "box-shadow:0 2px 12px rgba(0,0,0,.25);" if shadow else ""
@@ -156,18 +153,16 @@ def show_plot(df = None, fig = None, page_key = ""):
 if "chat_open" not in st.session_state:
     st.session_state.chat_open = False
 if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []  # list of {'role','content'}
+    st.session_state.chat_history = [] 
 
 @st.dialog("🤖 Chat with GoalScope Assistant")
 def chat_dialog():
     st.caption("Ask about goals, indicators, or how to interpret the current chart view.")
 
-    # history
     for m in st.session_state.chat_history:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-    # input
     user_msg = st.chat_input("Type your question…")
     if user_msg:
         st.session_state.chat_history.append({"role": "user", "content": user_msg})
@@ -181,7 +176,6 @@ def chat_dialog():
             st.markdown(reply)
         st.session_state.chat_history.append({"role": "assistant", "content": reply})
 
-    # footer actions
     st.divider()
     a, b = st.columns(2)
     with a:
@@ -196,11 +190,10 @@ def chat_dialog():
 
 def youtube_id(url: str) -> str:
     m = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", url)
-    return m.group(1) if m else url  # allow passing the raw 11-char ID
+    return m.group(1) if m else url 
 
 def youtube_autoplay(url_or_id: str, *, start=0, loop=False, height=360):
     vid = youtube_id(url_or_id)
-    # loop requires playlist=VIDEO_ID
     loop_params = f"&loop=1&playlist={vid}" if loop else ""
     src = (
         f"https://www.youtube.com/embed/{vid}"
@@ -239,11 +232,10 @@ try:
     kit = get_kit()
     kit.set_data_for_chat(df_sdg, df_lookup)
 
-    # If the user applied custom grouping in Settings, use it
     if "df_lookup_override" in st.session_state:
         df_lookup = st.session_state["df_lookup_override"]
         try:
-            kit.set_data_for_chat(df_sdg, df_lookup)  # keep chatbot context in sync
+            kit.set_data_for_chat(df_sdg, df_lookup)  
         except Exception:
             pass
 
@@ -252,7 +244,6 @@ except Exception as e:
     st.stop()
 
 
-# -------------------- Lists --------------------
 YEARS = sorted([int(y) for y in df_sdg["Year"].dropna().unique().tolist()])
 COUNTRIES = sorted(df_sdg["Country"].dropna().unique().tolist())
 REGIONS = sorted(df_sdg["Region"].dropna().unique().tolist())
@@ -267,7 +258,7 @@ def derive_groups(df_lookup):
     return [g for g in pref if g in u] + [g for g in u if g not in pref]
 
 GROUPS = derive_groups(df_lookup)
-st.session_state["GROUPS"] = GROUPS  # make available to all pages
+st.session_state["GROUPS"] = GROUPS 
 
 
 # -------------------- Sidebar Navigation --------------------
@@ -301,7 +292,7 @@ with st.sidebar:
         st.session_state.nav_page = "Home"
 
     page = option_menu(
-        None,  # no title inside the menu
+        None, 
         PAGES,
         icons=["house", "trophy", "graph-up",
                "diagram-3", "link-45deg", "gear", "info-circle"],
@@ -321,7 +312,6 @@ with st.sidebar:
             "nav-link-selected": {"background-color": "#4789C8", "color": "white"},
         },
     )
-    # keep current page in session so your app remembers it on rerun
     st.session_state.nav_page = page
 
     prev_page = st.session_state.get("last_nav_page")
@@ -438,17 +428,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 #logo_path = here / "sdg_grid.png" 
-# -------------------- Home --------------------
 
+
+# -------------------- Home --------------------
 
 if page == "Home":
     
     y0, y1 = int(min(YEARS)), int(max(YEARS))
         
-# Enhanced Home Page Section for GoalScope SDG Analytics Hub
-# Insert this into your existing app.py where page == "Home"
-    
-    # Hero Section with Enhanced Branding
     st.markdown("""
     <div class="hero">
         <h1><span class="dot">GOAL</span><span class="brand">Scope </span><span class="sub">{ SDG Analytics Hub }</span></h1>
@@ -461,7 +448,6 @@ if page == "Home":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Quick Stats Metrics Bar
     m1, m2, m3, m4, m5 = st.columns(5)
     
     with m1:
@@ -502,10 +488,8 @@ if page == "Home":
     st.markdown("<br>", unsafe_allow_html=True)
 
     with st.container(border=True): 
-        # The 17 SDGs Visual Grid
         st.markdown('<div class="section-title" style="text-align: center;">The 17 Sustainable Development Goals</div>', unsafe_allow_html=True)
         
-        # SDG badges with official colors
         sdg_data = {
             1: ("#E5243B", "No Poverty"),
             2: ("#DDA63A", "Zero Hunger"),
@@ -526,7 +510,6 @@ if page == "Home":
             17: ("#19486A", "Partnerships")
         }
 
-        # Display SDG badges
         sdg_html = '<div style="text-align: center; margin: 2rem 0;">'
         for i, (color, name) in sdg_data.items():
             sdg_html += f'<a href="https://sdgs.un.org/goals/goal{i}" target="_blank" rel="noopener noreferrer" style="text-decoration: none;">'
@@ -538,20 +521,14 @@ if page == "Home":
 
         st.markdown(sdg_html, unsafe_allow_html=True)
 
-
-    # Main Content: Two Column Layout
     c1a, c2a = st.columns([1, 1], vertical_alignment="top")
     
     with c1a:
-        # Video Section
         with st.container(border=True):    
-
-
             youtube_autoplay("https://youtu.be/0XTBYMfZyrM?si=yZtN5MVYe4OGoY-t", start=0, loop=True, height=400)
             st.caption("Learn about the 17 Sustainable Development Goals and their global impact.")        
 
 
-        # Data & Methodology Section
         with st.container(border=True):
             st.markdown('<div class="section-title">Data Sources & Methodology</div>', unsafe_allow_html=True)
             
@@ -590,7 +567,6 @@ if page == "Home":
 
     with c2a:
 
-        # Features Section
         with st.container(border=True):
             st.markdown('<div class="section-title">Key Features</div>', unsafe_allow_html=True)
             st.markdown("""
@@ -604,7 +580,6 @@ if page == "Home":
                 </ul>
             """, unsafe_allow_html=True)
 
-        # Benefits & Use Cases
         with st.container(border=True):
             st.markdown('<div class="section-title">Benefits</div>', unsafe_allow_html=True)
             st.markdown("""
@@ -617,7 +592,6 @@ if page == "Home":
                 </ul>
             """, unsafe_allow_html=True)
 
-        # Getting Started Guide
         with st.expander("Getting Started Guide", expanded=False):
             st.markdown("""
             ### How to Use GoalScope
@@ -777,7 +751,6 @@ if page == "Performance Rankings":
             year = st.selectbox("Year", years, index=0, key="bench_year")
         with c2:
             options = sorted(df_sdg["Country"].dropna().unique().tolist())
-            # default to "New Zealand" if it exists, else fall back to the first option
             default_idx = next((i for i, v in enumerate(options) if v == "New Zealand"), 0)
             country_val = st.selectbox("Country", options, index=default_idx, key="country_select")
         with c3:
@@ -836,7 +809,7 @@ if page == "Performance Rankings":
             "View mode",
             ["Locale", "Goals"],
             index=0,
-            horizontal=True,   # optional: put options on one line
+            horizontal=True, 
             key="view_mode"
         )        
 
@@ -1076,7 +1049,6 @@ elif page == "Trends & Projections":
             st.warning(f"Could not render: {e}")       
 
 
-
 if page == "Network & Structure":
     st.markdown('<div class="section-title">Network & Structure</div>', unsafe_allow_html=True)
     sub = st.segmented_control(
@@ -1086,7 +1058,6 @@ if page == "Network & Structure":
     )
 
     #tab_net, tab_pca, tab_den, tab_chd = st.tabs(["Network Graph", "PCA / Biplot", "Dendrogram", "Chord Diagram"])
-
     if sub == "Network Graph":
         #st.subheader("plot_sdg_network")
         c1, c2, c3, c4, c5 = st.columns(5)
@@ -1108,11 +1079,9 @@ if page == "Network & Structure":
             elif entity_type == "Country":
                 entities = st.multiselect("Countries", COUNTRIES, key="net_countries")
         with c3:
-            # --- time controls depend on selected entities --- 
             single_country = (entity_type == "Country" and len(entities) == 1)
 
             if single_country:
-                # force a years range, agg='none', min_non_null=5 
                 y0, y1 = st.select_slider(
                     "Years (required for a single country)",
                     options=YEARS,
@@ -1133,7 +1102,6 @@ if page == "Network & Structure":
         
         net3d = st.toggle("3D network", value=False, key="net_3d")
 
-        # --- call plotter ---
         try:
             kwargs = dict(
                 df_sdg=df_sdg,
@@ -1180,7 +1148,6 @@ if page == "Network & Structure":
             h = st.slider("Figure height", 200, 1200, 700, step=50, key="pca_h") 
 
         pca_3d = st.toggle("3D PCA (PC1–PC3)", value=False)
-
 
         try:
             pca_result = kit.plot_sdg_pca(
@@ -1310,8 +1277,7 @@ elif page == "Correlations":
         with c3:
             level = st.selectbox("Level", ["goal", "sdg"], index=0)
 
-        try:
-            # across_years requires exactly one entity      
+        try: 
             if mode == "across_years" and (entity_type == "None" or len(entities) != 1):
                 st.info("Pick exactly one Region/Country for 'across_years'.")
             else:
@@ -1475,7 +1441,6 @@ if page == "Settings":
     )
     class_code = 1 if scheme_label.startswith("Wedding") else 2
 
-    # Preview new grouping (does not change app state yet)
     with st.expander("Preview changes (first 25 rows)"):
         try:
             preview = get_kit().classify_groups(df_lookup, class_code=class_code)
@@ -1531,7 +1496,6 @@ if page == "Settings":
                 st.error(f"Reload failed: {e}")
 
 
-
 elif page == "About":
 
     st.markdown("""
@@ -1547,8 +1511,6 @@ elif page == "About":
     </div>
     """, unsafe_allow_html=True)    
 
-    #<i>App created by Jesus Eric Seacor; analysis and project work in collaboration with Sai Ram Ceka.</i>
-
     st.caption("""
     AI Use Statement : 
     This app generates human-readable “NLP insights” from plots using OpenAI’s GPT models via the Responses API. 
@@ -1563,7 +1525,6 @@ elif page == "About":
 y0, y1 = int(min(YEARS)), int(max(YEARS))
 st.divider()
 
-# Footer with additional info
 footer_col1, footer_col2, footer_col3 = st.columns(3)
 
 with footer_col1:
