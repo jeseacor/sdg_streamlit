@@ -227,7 +227,7 @@ class ProjectKit:
 
         df_goals["sdg"] = df_goals["code"].astype(int)
         goals_lookup = pd.DataFrame({
-            "code": df_goals["sdg"].apply(lambda x: f"Goal_{x}"),
+            "code": df_goals["sdg"].apply(lambda x: f"SDG_{x}"),
             "sdg": df_goals["sdg"],
             "description": df_goals["title"],
             "group": df_goals["group"]
@@ -246,19 +246,25 @@ class ProjectKit:
         df_lookup = pd.concat([goals_lookup, codebook_lookup], ignore_index=True)
         df_lookup = df_lookup[["code", "sdg", "group", "description"]]
 
+        df_lookup["code"] = df_lookup["code"].replace(r'^sdg', 'IND_', regex=True)
+        df_lookup["code"] = df_lookup["code"].replace(r'^Goal_', 'SDG_', regex=True)
+
         df_backdated_st = df_backdated.copy()
         df_backdated_st = df_backdated_st.dropna(subset=["indexreg_"])
-        df_backdated_st = df_backdated_st.rename(columns=lambda x: f"Goal_{x[4:]}" if x.lower().startswith("goal") else x)
+        df_backdated_st = df_backdated_st.rename(columns=lambda x: f"SDG_{x[4:]}" if x.lower().startswith("goal") else x)
         df_backdated_st = df_backdated_st.rename(columns=lambda x: x.replace("n_", "") if x.startswith("n_") else x)
 
         df_backdated_st = df_backdated_st[
             ['id', 'Country', 'year'] +
-            [col for col in df_backdated_st.columns if col.startswith('indexreg_') or col.startswith('sdg') or col.startswith('Goal_')]
+            [col for col in df_backdated_st.columns if col.startswith('indexreg_') or col.startswith('sdg') or col.startswith('SDG_')]
         ]
 
         if "sdgi_s" in df_backdated_st.columns:
             df_backdated_st = df_backdated_st.drop(columns=["sdgi_s"])
 
+        df_backdated_st = df_backdated_st.rename(columns=lambda x: x.replace("sdg", "IND_") if x.startswith("sdg") else x)
+        df_backdated_st = df_backdated_st.rename(columns=lambda x: x.replace("Goal_", "SDG_") if x.startswith("Goal_") else x)
+        
         #======== SDR 2025=============
 
         df_sdr2025_st = df_sdr2025.copy()
@@ -272,17 +278,22 @@ class ProjectKit:
         ]
         df_sdr2025_st = df_sdr2025_st.rename(
             columns=lambda c: re.sub(r'^(?!Score_reg_)(.+)_Score_reg$', r'Score_reg_\1', c)
-        )        
+        )
         df_sdr2025_st = df_sdr2025_st.rename(columns=lambda x: x.replace("_Score", "") if x.startswith('Goal_') and x.endswith("_Score") else x)
+
+        df_sdr2025_st = df_sdr2025_st.rename(columns=lambda x: x.replace("sdg", "IND_") if x.startswith('sdg') else x)
+        df_sdr2025_st = df_sdr2025_st.rename(columns=lambda x: x.replace("Goal_", "SDG_") if x.startswith('Goal_') else x)
 
         #==============================
 
         df_backdated_st = df_backdated_st.rename(columns={"id": "ID", "year": "Year", "indexreg_": "Region"})
         df_sdr2025_st = df_sdr2025_st.rename(columns={"iso3": "ID", "Name": "Country"})
         df_sdr2025_st.insert(2, "Year", 2025)
-        df_sdg = pd.concat([df_backdated_st, df_sdr2025_st], ignore_index=True)
+        df_sdg = pd.concat([df_backdated_st, df_sdr2025_st], ignore_index=True, join="outer", sort=False)
         df_sdg = df_sdg.sort_values(by=["Country", "Year"]).reset_index(drop=True)
-        num_cols = [col for col in df_sdg.columns if "sdg" in col or "Goal" in col]
+
+
+        num_cols = [col for col in df_sdg.columns if "IND_" in col or "SDG_" in col]
         df_sdg[num_cols] = df_sdg[num_cols].apply(pd.to_numeric, errors="coerce")
         #df_sdg = df_sdg.round(0)
         region_map = {
@@ -442,8 +453,8 @@ class ProjectKit:
         self._retrieval_docs = []
 
         years = sorted(pd.to_numeric(df_sdg["Year"], errors="coerce").dropna().unique().astype(int))
-        goals = [c for c in df_sdg.columns if c.startswith("Goal_")]
-        sdg_codes = [c for c in df_sdg.columns if c.lower().startswith("sdg")]
+        goals = [c for c in df_sdg.columns if c.startswith("SDG_")]
+        sdg_codes = [c for c in df_sdg.columns if c.lower().startswith("ind_")]
         n_countries = df_sdg["Country"].nunique() if "Country" in df_sdg.columns else 0
         n_regions   = df_sdg["Region"].nunique() if "Region" in df_sdg.columns else 0
         groups = (df_lookup["group"].dropna().unique().tolist()
@@ -626,7 +637,7 @@ class ProjectKit:
         look = df_lookup[df_lookup["group"].str.lower() == group_norm].copy()
 
         if level == "goal":
-            value_cols = [c for c in df_year.columns if c.startswith("Goal_") and c in look["code"].values]
+            value_cols = [c for c in df_year.columns if c.startswith("SDG_") and c in look["code"].values]
             title = f"Ranking of Goals in {group} group • Year {year}"
             y_name = "Goal"
             if not value_cols:
@@ -640,8 +651,8 @@ class ProjectKit:
         elif level == "sdg":
             goal_codes = look["code"].unique()
             goal_nums = [re.findall(r"(\d+)", c)[0] for c in goal_codes if re.findall(r"(\d+)", c)]
-            value_cols = [c for c in df_year.columns if c.lower().startswith("sdg") 
-                        and any(c.startswith(f"sdg{n}") for n in goal_nums)]
+            value_cols = [c for c in df_year.columns if c.lower().startswith("ind_") 
+                        and any(c.startswith(f"IND_{n}") for n in goal_nums)]
             title = f"Ranking of SDG indicators in {group} group • Year {year}"
             y_name = "Indicator"
             if not value_cols:
@@ -720,13 +731,13 @@ class ProjectKit:
         df_year = df_scope
 
         if rank_by.lower() == "goal":
-            value_cols = [c for c in df_year.columns if c.startswith("Goal_")]
+            value_cols = [c for c in df_year.columns if c.startswith("SDG_")]
             chart_title = f"Ranking of SDG Goals • Year {year}"
         elif rank_by.lower() == "sdg":
-            value_cols = [c for c in df_year.columns if c.lower().startswith("sdg") and len(c) > 7]
+            value_cols = [c for c in df_year.columns if c.lower().startswith("ind_") and len(c) > 7]
             chart_title = f"Ranking of SDG Indicators • Year {year}"
         elif rank_by.lower() == "group":
-            value_cols = [c for c in df_year.columns if c.startswith("Goal_")]
+            value_cols = [c for c in df_year.columns if c.startswith("SDG_")]
             chart_title = f"Ranking of SDG Groups • Year {year}"
         else:
             raise ValueError("rank_by must be 'goal', 'sdg', or 'group'")
@@ -825,7 +836,7 @@ class ProjectKit:
             group_label_map = {g.lower(): g for g in _groups.unique()}
 
         if value_col is None:
-            goal_cols = [c for c in d.columns if c.startswith("Goal_")]
+            goal_cols = [c for c in d.columns if c.startswith("SDG_")]
             if not goal_cols:
                 raise ValueError("No Goal_* columns found to compute Overall Score.")
             d["__overall__"] = d[goal_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
@@ -936,7 +947,7 @@ class ProjectKit:
         df_lookup: pd.DataFrame | None = None,
         *,
         year: int | None = None,
-        goal: str | None = None, # None => Overall; or "Goal_#", "sdg*", or a group name from df_lookup["group"]
+        goal: str | None = None, # None => Overall; or "SDG_#", "sdg*", or a group name from df_lookup["group"]
         agg: str = "mean",
         decimals: int = 2,
         region: str | list[str] = "All Regions",
@@ -962,6 +973,7 @@ class ProjectKit:
                 raise ValueError("Region column not found in df_sdg")
             d = d[d["Region"].isin(regions)]
 
+
         d_full = d.copy()
 
         if year is not None:
@@ -979,8 +991,8 @@ class ProjectKit:
                 return "Overall Score"
             g_str = str(g).strip()
             gl = g_str.lower()
-            if g_str.startswith("Goal_"):
-                return f"Goal {g_str.split('_', 1)[1]}"
+            if g_str.startswith("SDG_"):
+                return f"SDG {g_str.split('_', 1)[1]}"
             if gl in group_names_lower:
                 return group_label_lookup.get(gl, g_str.title())
             return g_str
@@ -988,31 +1000,51 @@ class ProjectKit:
         score_src_label = _score_label_from_goal(goal)
 
         def _fallback_series(frame: pd.DataFrame, base_col: str) -> pd.Series:
+            # Start from base (coerce blanks to NaN)
             if base_col in frame.columns:
                 s = pd.to_numeric(frame[base_col], errors="coerce")
             else:
                 s = pd.Series(np.nan, index=frame.index, dtype="float64")
 
-            alt1 = f"Score_reg_{base_col}"
-            if alt1 in frame.columns:
-                s = s.fillna(pd.to_numeric(frame[alt1], errors="coerce"))
+            # Normalize and derive goal number where possible
+            m_sdg  = re.fullmatch(r"(?i)sdg_(\d+)", base_col)
+            m_goal = re.fullmatch(r"(?i)goal_(\d+)", base_col)
+            n = m_sdg.group(1) if m_sdg else (m_goal.group(1) if m_goal else None)
+
+            # Generic first fallback you already had (harmless to keep)
+            alt_generic = f"Score_reg_{base_col}"
+            if alt_generic in frame.columns:
+                s = s.fillna(pd.to_numeric(frame[alt_generic], errors="coerce"))
+
+            # Preferred canonical fallbacks by number (covers user requirement)
+            if n is not None:
+                # 1) requested: SDG_* → Score_reg_Goal_*
+                for alt in [
+                    f"Score_reg_Goal_{n}",
+                    f"Goal_{n}_Score_reg",
+                    f"Goal_{n}",          # sometimes a plain "Goal_#" exists
+                    f"Score_reg_SDG_{n}", # rare but safe to try last
+                ]:
+                    if alt in frame.columns:
+                        s = s.fillna(pd.to_numeric(frame[alt], errors="coerce"))
 
             return s
 
 
+
         def _metric(frame: pd.DataFrame) -> pd.Series:
             if goal is None or str(goal).strip().lower() in {"overall", "overall score", "overall scores"}:
-                bases = set()
+                nums: set[str] = set()
                 for c in frame.columns:
-                    m = re.fullmatch(r"(Goal_\d+)$", c)
-                    if m: bases.add(m.group(1))
-                    m = re.fullmatch(r"(Goal_\d+)_Score_reg$", c)
-                    if m: bases.add(m.group(1))
-                    m = re.fullmatch(r"Score_reg_(Goal_\d+)$", c)
-                    if m: bases.add(m.group(1))
-                if not bases:
-                    raise ValueError("No Goal_* (or Score_reg_Goal_* / Goal_*_Score_reg) columns to compute Overall Score.")
-                goal_bases = sorted(bases, key=lambda x: int(x.split("_")[1]))
+                    for pat in [r"(?i)sdg_(\d+)$", r"(?i)goal_(\d+)_score_reg$", r"(?i)score_reg_goal_(\d+)$", r"(?i)goal_(\d+)$"]:
+                        m = re.fullmatch(pat, c)
+                        if m:
+                            nums.add(m.group(1))
+
+                if not nums:
+                    raise ValueError("No Goal_* / SDG_* columns found to compute Overall Score.")
+
+                goal_bases = [f"SDG_{k}" for k in sorted(nums, key=lambda x: int(x))]
                 mat = pd.concat([_fallback_series(frame, b) for b in goal_bases], axis=1)
                 return mat.mean(axis=1, skipna=True)
 
@@ -1026,13 +1058,15 @@ class ProjectKit:
                     df_lookup.loc[df_lookup["group"].astype(str).str.strip().str.lower() == gl, "code"]
                     .dropna().astype(str).tolist()
                 )
-                bases = [c for c in codes if re.fullmatch(r"Goal_\d+", c)]
+                #bases = [c for c in codes if re.fullmatch(r"SDG_\d+", c)]
+                bases = [re.sub(r"^Goal_", "SDG_", str(c))
+                    for c in codes if re.fullmatch(r"(?:SDG|Goal)_\d+", str(c))]
                 if not bases:
                     raise ValueError(f"No Goal_* codes found in df_lookup for group '{g}'.")
                 mat = pd.concat([_fallback_series(frame, b) for b in bases], axis=1)
                 return mat.mean(axis=1, skipna=True)
 
-            if re.fullmatch(r"Goal_\d+", g):
+            if re.fullmatch(r"SDG_\d+", g):
                 return _fallback_series(frame, g)
 
             if g not in frame.columns:
@@ -1113,7 +1147,7 @@ class ProjectKit:
         self,
         df_sdg: pd.DataFrame,
         df_lookup: pd.DataFrame,
-        items: str | list[str] | None = None,   # "Goal_9", "sdg9_uni", ["Goal_1","Goal_9"], "economic", None
+        items: str | list[str] | None = None,   # "SDG_9", "sdg9_uni", ["SDG_1","SDG_9"], "economic", None
         mode: str = "auto",                      # "goal", "sdg", or "auto"
         group_filter: str | list[str] | None = None,  # "economic" | ["social","environmental"] | None
         entity_type: str | None = None,          # None, "Region", or "Country"
@@ -1136,22 +1170,27 @@ class ProjectKit:
         def _is_group_name(s: str) -> bool:
             return s.lower() in set(df_lookup["group"].str.lower().unique())
 
-        def _prefix_for(m):
-            return "Goal_" if m == "goal" else "sdg"
+        def _prefix_for(mode):
+            return "SDG_" if mode == "goal" else "IND_"
 
         items_list = _norm_list(items)
         if mode not in {"goal", "sdg", "auto"}:
             raise ValueError("mode must be 'goal', 'sdg', or 'auto'.")
 
         if mode == "auto":
-            if items_list and any(str(x).lower().startswith("sdg") for x in items_list):
+            if items_list and any(re.match(r'(?i)^SDG_\d{1,2}$', str(x)) for x in items_list):
+                mode = "goal"
+            elif items_list and any(str(x).lower().startswith("ind_") for x in items_list):
                 mode = "sdg"
             else:
                 mode = "goal"
 
         prefix = _prefix_for(mode)
 
-        look = df_lookup[df_lookup["code"].str.startswith(prefix)][["code", "group", "description"]].drop_duplicates()
+        def _startswith_ci(s, prefix):
+            return s.str.lower().str.startswith(prefix.lower())
+
+        look = df_lookup[_startswith_ci(df_lookup["code"], prefix)][["code","group","description"]].drop_duplicates()
 
         groups = _norm_list(group_filter)
         if groups:
@@ -1316,7 +1355,7 @@ class ProjectKit:
 
         df = df_sdg.copy()
         is_overall = (goal is None) or (isinstance(goal, str) and goal.strip().lower() == "overall score")
-        goal_cols = [c for c in df.columns if isinstance(c, str) and c.startswith("Goal_")]
+        goal_cols = [c for c in df.columns if isinstance(c, str) and c.startswith("SDG_")]
         overall_col = None
         goal_label = "Overall Score" if is_overall else str(goal)
 
@@ -1470,7 +1509,7 @@ class ProjectKit:
         end_year: int,
         level: str = "goal",                 # "goal" or "sdg"
         group_filter: str | list[str] | None = None,   # economic, social, environmental, partnership
-        items: str | list[str] | None = None,          # e.g., ["Goal_3","Goal_9"] or ["sdg9_uni", ...] or group names
+        items: str | list[str] | None = None,          # e.g., ["SDG_3","SDG_9"] or ["sdg9_uni", ...] or group names
         entity_type: str | None = None,     # None or "Region" or "Country"
         entities: str | list[str] | None = None,       # one/many entity names when entity_type is set
         agg: str = "mean",                  # "mean" or "median"
@@ -1490,8 +1529,8 @@ class ProjectKit:
         items_raw  = _as_list(items)
 
         lvl = level.strip().lower()
-        if   lvl == "goal": base_cols = [c for c in df_sdg.columns if isinstance(c, str) and c.startswith("Goal_")]
-        elif lvl == "sdg":  base_cols = [c for c in df_sdg.columns if isinstance(c, str) and c.lower().startswith("sdg")]
+        if   lvl == "goal": base_cols = [c for c in df_sdg.columns if isinstance(c, str) and c.startswith("SDG_")]
+        elif lvl == "sdg":  base_cols = [c for c in df_sdg.columns if isinstance(c, str) and c.lower().startswith("ind_")]
         else:
             raise ValueError("level must be 'goal' or 'sdg'")
 
@@ -1655,7 +1694,7 @@ class ProjectKit:
 
     def _compute_metric(self, d, df_lookup, measure):
         if (measure is None) or (str(measure).lower() in ("overall", "overall score")):
-            goal_cols = [c for c in d.columns if c.startswith("Goal_")]
+            goal_cols = [c for c in d.columns if c.startswith("SDG_")]
             v = d[goal_cols].apply(pd.to_numeric, errors="coerce").mean(axis=1, skipna=True)
             return v.rename("value"), "Overall Score"
 
@@ -1678,7 +1717,7 @@ class ProjectKit:
         region: str | None = None,          # None / "All Regions" -> no region filter
         start_year: int | None = None,      # None -> min available
         end_year: int | None = None,        # None -> max available
-        measure: str | None = None,         # None/"Overall Score", or "Goal_#", or group name
+        measure: str | None = None,         # None/"Overall Score", or "SDG_#", or group name
         label_top: int = 5,
         fig_height: int = 520,
         fig_width: int | None = None,
@@ -1886,7 +1925,7 @@ class ProjectKit:
                 yrs = sorted(df_work["Year"].unique().tolist())
                 title_suffix = f"Country: {group_val}  Years: {yrs[0]}-{yrs[-1]}" if len(yrs)>1 else f"Country: {group_val}"
 
-        sdg_cols = [c for c in df_work.columns if c.startswith("Goal_")]
+        sdg_cols = [c for c in df_work.columns if c.startswith("SDG_")]
         df_scores = df_work[sdg_cols].copy()
 
         nunique = df_scores.nunique(dropna=True)
@@ -1957,9 +1996,9 @@ class ProjectKit:
     ):
 
         if level.lower() == "goal":
-            value_cols = [c for c in df_sdg.columns if isinstance(c, str) and c.startswith("Goal_")]
+            value_cols = [c for c in df_sdg.columns if isinstance(c, str) and c.startswith("SDG_")]
         elif level.lower() == "sdg":
-            value_cols = [c for c in df_sdg.columns if isinstance(c, str) and c.lower().startswith("sdg")]
+            value_cols = [c for c in df_sdg.columns if isinstance(c, str) and c.lower().startswith("ind_")]
         else:
             raise ValueError("level must be 'goal' or 'sdg'")
 
@@ -2105,10 +2144,10 @@ class ProjectKit:
         d = df_sdg[df_sdg["Year"] == year].copy()
 
         if indicator_mode:
-            value_cols = [c for c in d.columns if isinstance(c, str) and c.lower().startswith("sdg")]
+            value_cols = [c for c in d.columns if isinstance(c, str) and c.lower().startswith("ind_")]
             kind_name = "Goals" if False else "Indicators"
         else:
-            value_cols = [c for c in d.columns if isinstance(c, str) and c.startswith("Goal_")]
+            value_cols = [c for c in d.columns if isinstance(c, str) and c.startswith("SDG_")]
             kind_name = "Goals"
 
         if not value_cols:
@@ -2209,10 +2248,10 @@ class ProjectKit:
             raise ValueError(f"No rows for year {year}")
 
         if mode.lower() == "goal":
-            value_cols = [c for c in d.columns if c.startswith("Goal_")]
+            value_cols = [c for c in d.columns if c.startswith("SDG_")]
             kind = "Goals"
         elif mode.lower() == "indicator":
-            value_cols = [c for c in d.columns if str(c).lower().startswith("sdg")]
+            value_cols = [c for c in d.columns if str(c).lower().startswith("ind_")]
             kind = "Indicators"
         else:
             raise ValueError("mode must be 'goal' or 'indicator'")
@@ -2231,7 +2270,7 @@ class ProjectKit:
 
         if mode.lower() == "indicator" and goal_filter:
             gf = [goal_filter] if isinstance(goal_filter,(int,str)) else goal_filter
-            gf_nums = {str(g).replace("Goal_","") for g in gf}
+            gf_nums = {str(g).replace("SDG_","") for g in gf}
             value_cols = [c for c in value_cols if str(lookup.loc[c,"sdg"]) in gf_nums]
 
         if len(value_cols) < 2:
@@ -2283,10 +2322,10 @@ class ProjectKit:
             raise ValueError(f"No rows found for year {year}")
 
         if mode.lower() == "goal":
-            value_cols = [c for c in d.columns if str(c).startswith("Goal_")]
+            value_cols = [c for c in d.columns if str(c).startswith("SDG_")]
             kind = "Goals"
         elif mode.lower() == "indicator":
-            value_cols = [c for c in d.columns if str(c).lower().startswith("sdg")]
+            value_cols = [c for c in d.columns if str(c).lower().startswith("ind_")]
             kind = "Indicators"
         else:
             raise ValueError("mode must be 'goal' or 'indicator'")
@@ -2363,9 +2402,9 @@ class ProjectKit:
             raise ValueError(f"No rows for year {year}")
 
         if mode.lower() == "goal":
-            value_cols = [c for c in d.columns if str(c).startswith("Goal_")]
+            value_cols = [c for c in d.columns if str(c).startswith("SDG_")]
         else:
-            value_cols = [c for c in d.columns if str(c).lower().startswith("sdg")]
+            value_cols = [c for c in d.columns if str(c).lower().startswith("ind_")]
 
         meta = df_lookup[["code","group"]].dropna().copy()
         meta["group"] = meta["group"].str.lower()
@@ -2443,7 +2482,7 @@ class ProjectKit:
         df_sdg: pd.DataFrame,
         df_lookup: pd.DataFrame,
         year: int = 2025,
-        value_prefix: str = "Goal_",
+        value_prefix: str = "SDG_",
     ) -> pd.DataFrame:
 
         df_year = df_sdg.loc[df_sdg["Year"] == year].copy()
@@ -2507,9 +2546,9 @@ class ProjectKit:
     ) -> pd.DataFrame:
 
         if mode.lower() == "sdg":
-            val_cols = [c for c in df_sdg.columns if c.lower().startswith("sdg")]
+            val_cols = [c for c in df_sdg.columns if c.lower().startswith("ind_")]
         else:
-            val_cols = [c for c in df_sdg.columns if c.startswith("Goal_")]
+            val_cols = [c for c in df_sdg.columns if c.startswith("SDG_")]
 
         val_cols = [c for c in val_cols if c in df_sdg.columns]
         if not val_cols:
@@ -2609,15 +2648,15 @@ class ProjectKit:
             df = df.loc[df["Year"] == year].copy()
 
         target = str(target)
-        is_goal = target.lower().startswith("goal_")
-        is_sdg  = target.lower().startswith("sdg")
+        is_goal = target.lower().startswith("sdg_")
+        is_sdg  = target.lower().startswith("ind_")
         if not (is_goal or is_sdg):
-            raise ValueError("`target` must start with 'Goal_' or 'sdg'.")
+            raise ValueError("`target` must start with 'SDG_' or 'IND_'.")
 
         if is_goal:
-            value_cols = [c for c in df.columns if c.startswith("Goal_")]
+            value_cols = [c for c in df.columns if c.startswith("SDG_")]
         else:
-            value_cols = [c for c in df.columns if c.startswith("sdg")]
+            value_cols = [c for c in df.columns if c.startswith("IND_")]
 
         if target not in value_cols:
             raise KeyError(
@@ -2745,23 +2784,23 @@ class ProjectKit:
 
         if sdg_cols is None:
             if variable_type.lower() == "goal":
-                cand = [c for c in df.columns if str(c).lower().startswith("goal_")]
+                cand = [c for c in df.columns if str(c).lower().startswith("sdg_")]
                 if group_filter_norm:
                     allowed = set(lu.loc[lu["group_norm"].isin(group_filter_norm), "code"])
                     cand = [c for c in cand if c in allowed]
                 sdg_cols = cand
             else:
                 exist_codes = [c for c in lu["code"].unique().tolist()
-                            if c in df.columns and not str(c).lower().startswith("goal_")]
+                            if c in df.columns and not str(c).lower().startswith("sdg_")]
                 if group_filter_norm:
                     allowed = set(lu.loc[lu["group_norm"].isin(group_filter_norm), "code"])
                     exist_codes = [c for c in exist_codes if c in allowed]
                 sdg_cols = exist_codes
         else:
             if variable_type.lower() == "goal":
-                sdg_cols = [c for c in sdg_cols if str(c).lower().startswith("goal_")]
+                sdg_cols = [c for c in sdg_cols if str(c).lower().startswith("sdg_")]
             else:
-                sdg_cols = [c for c in sdg_cols if not str(c).lower().startswith("goal_")]
+                sdg_cols = [c for c in sdg_cols if not str(c).lower().startswith("sdg_")]
             if group_filter_norm:
                 allowed = set(lu.loc[lu["group_norm"].isin(group_filter_norm), "code"])
                 sdg_cols = [c for c in sdg_cols if c in allowed]
@@ -2847,7 +2886,7 @@ class ProjectKit:
                     showlegend=False, hoverinfo="skip"
                 ))
                 if show_var_labels:
-                    lab = col.replace("_Score", "").replace("Goal_", "SDG ")
+                    lab = col.replace("_Score", "").replace("SDG_", "SDG ")
                     fig.add_trace(go.Scatter3d(
                         x=[x1], y=[y1], z=[z1],
                         mode="text", text=[lab],
@@ -2928,7 +2967,7 @@ class ProjectKit:
                     arrowcolor=c
                 )   
                 if show_var_labels:
-                    lab = col.replace("_Score","").replace("Goal_","SDG ")
+                    lab = col.replace("_Score","").replace("SDG_","SDG ")
                     fig.add_annotation(x=x1, y=y1, text=lab, showarrow=False,
                                     font=dict(size=label_font_size, color=c),
                                     xanchor="left", yanchor="bottom")
@@ -2983,7 +3022,7 @@ class ProjectKit:
                     arrowcolor=c
                 )                
                 if show_var_labels:
-                    lab = col.replace("_Score","").replace("Goal_","SDG ")
+                    lab = col.replace("_Score","").replace("SDG_","SDG ")
                     fig.add_annotation(x=x1, y=y1, text=lab, showarrow=False,
                                     font=dict(size=label_font_size, color=c),
                                     xanchor="left", yanchor="bottom")
@@ -3093,12 +3132,12 @@ class ProjectKit:
                     df = df.groupby(group_cols, dropna=False).agg(agg_fn).reset_index()
 
         if level == "goal":
-            value_cols = [c for c in df.columns if c.startswith("Goal_")]
+            value_cols = [c for c in df.columns if c.startswith("SDG_")]
             if group_filter:
                 allowed = set(df_lookup.loc[df_lookup["group"].isin(group_filter), "code"].astype(str))
                 value_cols = [c for c in value_cols if c in allowed]
         elif level == "sdg":
-            value_cols = [c for c in df.columns if c.startswith("sdg")]
+            value_cols = [c for c in df.columns if c.startswith("IND_")]
             if group_filter:
                 allowed = set(df_lookup.loc[df_lookup["group"].isin(group_filter), "code"].astype(str))
                 value_cols = [c for c in value_cols if c in allowed]
@@ -3132,7 +3171,7 @@ class ProjectKit:
 
         goal_to_group = {}
         if level == "goal" and {"sdg", "group"}.issubset(set(df_lookup.columns)):
-            for gcol in [c for c in good_cols if c.startswith("Goal_")]:
+            for gcol in [c for c in good_cols if c.startswith("SDG_")]:
                 try:
                     gnum = int(gcol.split("_", 1)[1])
                     grp_counts = Counter(df_lookup.loc[df_lookup["sdg"] == gnum, "group"].dropna().astype(str))
@@ -3365,7 +3404,7 @@ class ProjectKit:
             pool = df_sdg[df_sdg["Year"] == year]
             pool_label = "all regions"                       # <- for title & legend
 
-        goal_cols = [c for c in df_sdg.columns if str(c).startswith("Goal_")]
+        goal_cols = [c for c in df_sdg.columns if str(c).startswith("SDG_")]
         country_vals = row[goal_cols].astype(float)
 
         if benchmark == "top_quartile":
@@ -3378,7 +3417,7 @@ class ProjectKit:
             raise ValueError("benchmark must be 'top_quartile' or 'median'.")
 
         out = pd.DataFrame({
-            "goal_label": goal_cols,
+            "SDG_label": goal_cols,
             "country_score": country_vals.values,
             "benchmark": bench_vals.values
         }).dropna()
@@ -3394,7 +3433,7 @@ class ProjectKit:
         for _, r in out.iterrows():
             fig.add_trace(go.Scatter(
                 x=[r["country_score"], r["benchmark"]],
-                y=[r["goal_label"], r["goal_label"]],
+                y=[r["SDG_label"], r["SDG_label"]],
                 mode="lines",
                 line=dict(color=line_color, width=line_width),
                 hoverinfo="skip",
@@ -3402,7 +3441,7 @@ class ProjectKit:
             ))
 
         fig.add_trace(go.Scatter(
-            x=out["country_score"], y=out["goal_label"],
+            x=out["country_score"], y=out["SDG_label"],
             mode="markers",
             marker=dict(color="#2c7be5", size=8),
             name=country,  # legend
@@ -3410,7 +3449,7 @@ class ProjectKit:
         ))
 
         fig.add_trace(go.Scatter(
-            x=out["benchmark"], y=out["goal_label"],
+            x=out["benchmark"], y=out["SDG_label"],
             mode="markers",
             marker=dict(color="#e55353", size=8, symbol="diamond"),
             name=f"{bench_label} ({pool_label})",
@@ -3431,7 +3470,7 @@ class ProjectKit:
                 txt = f"{r['gap_points']:.1f} pts"
                 if np.isfinite(r["gap_pct"]): txt += f" ({r['gap_pct']:.0f}%)"
                 fig.add_annotation(
-                    x=lbl_x, y=r["goal_label"], xref="x", yref="y",
+                    x=lbl_x, y=r["SDG_label"], xref="x", yref="y",
                     text=txt, showarrow=False, xanchor="left", yshift=label_yshift,
                     bgcolor="rgba(255,255,255,0.85)", bordercolor="rgba(0,0,0,0.25)",
                     borderwidth=1, font=dict(size=12, color="black"), align="left"
@@ -3484,9 +3523,23 @@ class ProjectKit:
         if df.empty:
             raise ValueError("No rows left after filters. Check year, region, or country.")
 
-        goal_cols = [c for c in df.columns if c.startswith("Goal_")]
+        # === NEW: Coalesce SDG_* from Score_reg_Goal_* (per cell) ===
+        # Do this BEFORE any aggregation/melt so blanks/NaNs in SDG_* pick up regional fallbacks.
+        for k in range(1, 18):
+            a = f"SDG_{k}"
+            b = f"Score_reg_Goal_{k}"
+            if a in df.columns and b in df.columns:
+                df[a] = (
+                    pd.to_numeric(df[a], errors="coerce")
+                    .combine_first(pd.to_numeric(df[b], errors="coerce"))
+                )
+        # === END NEW ===
+
+
+
+        goal_cols = [c for c in df.columns if c.startswith("SDG_")]
         if not goal_cols:
-            raise ValueError("No Goal_ columns in df_sdg.")
+            raise ValueError("No SDG_ columns in df_sdg.")
         vals = (df[goal_cols].median(numeric_only=True)
                 if aggregate.lower() == "median"
                 else df[goal_cols].mean(numeric_only=True)).astype(float)
@@ -3568,12 +3621,19 @@ class ProjectKit:
             cname = country_names if isinstance(country_names, str) else country_names[0]
             row = peers.loc[peers["Country"] == cname]
         
+             # UPDATED: also check Score_reg_Goal_<n> for overall computations
             def fallback_value(series, base):
                 v = pd.to_numeric(series.get(base), errors="coerce")
-                if pd.isna(v): v = pd.to_numeric(series.get(f"Score_reg_{base}"), errors="coerce")
-                if pd.isna(v): v = pd.to_numeric(series.get(f"{base}_Score_reg"), errors="coerce")
+                if pd.isna(v):
+                    m = re.match(r"SDG_(\d+)$", str(base))
+                    if m:
+                        v = pd.to_numeric(series.get(f"Score_reg_Goal_{m.group(1)}"), errors="coerce")
+                if pd.isna(v):
+                    v = pd.to_numeric(series.get(f"Score_reg_{base}"), errors="coerce")
+                if pd.isna(v):
+                    v = pd.to_numeric(series.get(f"{base}_Score_reg"), errors="coerce")
                 return v
-            base_goals = [c for c in peers.columns if re.fullmatch(r"Goal_\d+", c)]
+            base_goals = [c for c in peers.columns if re.fullmatch(r"SDG_\d+", c)]
         
             if year == 2025 and "Overall_Score" in peers.columns and not row.empty:
                 score = float(pd.to_numeric(row.iloc[0]["Overall_Score"], errors="coerce"))
@@ -3689,7 +3749,7 @@ class ProjectKit:
     def _goal_codes(self, df_lookup: pd.DataFrame):
         s = (df_lookup.get("code", pd.Series(dtype=str))
             .dropna().astype(str))
-        s = s[s.str.match(r"^Goal_\d{1,2}$")]
+        s = s[s.str.match(r"^SDG_\d{1,2}$")]
         codes = sorted(s.unique().tolist(), key=lambda c: int(c.split("_")[1]))
         return codes
 
@@ -3701,7 +3761,7 @@ class ProjectKit:
         look["group"] = look["group"].astype(str).str.strip()
         gmap = {}
         for g, sub in look.groupby(look["group"].str.lower()):
-            codes = sub["code"].loc[sub["code"].str.match(r"^Goal_\d{1,2}$")].tolist()
+            codes = sub["code"].loc[sub["code"].str.match(r"^SDG_\d{1,2}$")].tolist()
             if codes:
                 codes = sorted(codes, key=lambda c: int(c.split("_")[1]))
                 gmap[g] = codes
@@ -3740,7 +3800,7 @@ class ProjectKit:
                 n = int(m.group(1))
             if not (1 <= n <= 17):
                 raise ValueError(f"SDG number {n} out of range (1..17).")
-            out.append(f"Goal_{n}")
+            out.append(f"SDG_{n}")
         return sorted(set(out), key=lambda c: int(c.split("_")[1]))
 
     def _forecast_one_series(self, y_yearly: pd.Series, h: int, last_hist_year: int) -> pd.DataFrame:

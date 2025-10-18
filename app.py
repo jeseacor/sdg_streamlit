@@ -247,8 +247,8 @@ except Exception as e:
 YEARS = sorted([int(y) for y in df_sdg["Year"].dropna().unique().tolist()])
 COUNTRIES = sorted(df_sdg["Country"].dropna().unique().tolist())
 REGIONS = sorted(df_sdg["Region"].dropna().unique().tolist())
-GOAL_COLS = [c for c in df_sdg.columns if str(c).startswith("Goal_")]
-SDG_COLS  = [c for c in df_sdg.columns if str(c).lower().startswith("sdg") and len(c) > 3]
+GOAL_COLS = [c for c in df_sdg.columns if str(c).startswith("SDG_")]
+SDG_COLS  = [c for c in df_sdg.columns if str(c).lower().startswith("ind_") and len(c) > 3]
 
 def derive_groups(df_lookup):
     pref = ["economic", "social", "environmental"]
@@ -1413,7 +1413,7 @@ elif page == "Correlations":
         #st.subheader("get_cross_group_corr_sym")
         year = st.selectbox("Year", YEARS, index=len(YEARS)-1, key="sym_year")
         try:
-            df_sym = kit.get_cross_group_corr_sym(df_sdg=df_sdg, df_lookup=df_lookup, year=year, value_prefix="Goal_")
+            df_sym = kit.get_cross_group_corr_sym(df_sdg=df_sdg, df_lookup=df_lookup, year=year, value_prefix="SDG_")
             show_plot(df=df_sym, page_key="get_cross_group_corr_sym")
 
         except Exception as e:
